@@ -187,6 +187,291 @@ def delete_router(ip):
             WHERE ip = ?
 @app.route('/api/health', methods=['GET'])
 @login_required
+# Map & Stats endpoints
+@app.route('/api/map/routers', methods=['GET'])
+@login_required
+def get_map_routers():
+    """Get routers with coordinates for map"""
+    try:
+        conn = db_manager.get_connection()
+        routers = conn.execute('''
+            SELECT site, name, ip, provider, access_type, latitude, longitude, 
+                   pic_name, pic_phone, timezone,
+                   (SELECT status FROM runtime_states WHERE ip = routers.ip) as status
+            FROM routers
+            WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        ''').fetchall()
+        conn.close()
+        return jsonify([dict(row) for row in routers])
+    except Exception as e:
+        logger.error(f"Error getting map routers: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/sites', methods=['GET'])
+@login_required
+def get_sites():
+    """Get list of unique sites for filter"""
+    try:
+        conn = db_manager.get_connection()
+        sites = conn.execute('SELECT DISTINCT site FROM routers ORDER BY site').fetchall()
+        conn.close()
+        return jsonify([row['site'] for row in sites])
+    except Exception as e:
+        logger.error(f"Error getting sites: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/stats/downtime-by-site', methods=['GET'])
+@login_required
+def stats_downtime_by_site():
+    """Get downtime count by site for chart"""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    provider = request.args.get('provider')
+    
+    try:
+        conn = db_manager.get_connection()
+        query = '''
+            SELECT name, site, provider, COUNT(*) as count, 
+                   SUM(duration_sec) as total_duration
+            FROM downtime_history 
+            WHERE 1=1
+        '''
+        params = []
+        
+        if from_date:
+            query += ' AND down_time >= ?'
+            params.append(from_date)
+        if to_date:
+            query += ' AND down_time <= ?'
+            params.append(to_date + ' 23:59:59')
+        if provider:
+            query += ' AND provider = ?'
+            params.append(provider)
+        
+        query += ' GROUP BY name, site, provider ORDER BY count DESC LIMIT 10'
+        
+        stats = conn.execute(query, params).fetchall()
+        conn.close()
+        
+        return jsonify([dict(row) for row in stats])
+    except Exception as e:
+        logger.error(f"Error getting downtime stats: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/stats/downtime-by-provider', methods=['GET'])
+@login_required
+def stats_downtime_by_provider():
+    """Get downtime count by provider for pie chart"""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    
+    try:
+        conn = db_manager.get_connection()
+        query = '''
+            SELECT provider, COUNT(*) as count, SUM(duration_sec) as total_duration
+            FROM downtime_history 
+            WHERE 1=1
+        '''
+        params = []
+        
+        if from_date:
+            query += ' AND down_time >= ?'
+            params.append(from_date)
+        if to_date:
+            query += ' AND down_time <= ?'
+            params.append(to_date + ' 23:59:59')
+        
+        query += ' GROUP BY provider'
+        
+        stats = conn.execute(query, params).fetchall()
+        conn.close()
+        
+        return jsonify([dict(row) for row in stats])
+    except Exception as e:
+        logger.error(f"Error getting provider stats: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/stats/downtime-trend', methods=['GET'])
+@login_required
+def stats_downtime_trend():
+    """Get downtime trend by day for line chart"""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    provider = request.args.get('provider')
+    
+    try:
+        conn = db_manager.get_connection()
+        query = '''
+            SELECT DATE(down_time) as date, COUNT(*) as count, 
+                   SUM(duration_sec) as total_duration
+            FROM downtime_history 
+            WHERE 1=1
+        '''
+        params = []
+        
+        if from_date:
+            query += ' AND down_time >= ?'
+            params.append(from_date)
+        if to_date:
+            query += ' AND down_time <= ?'
+            params.append(to_date + ' 23:59:59')
+        if provider:
+            query += ' AND provider = ?'
+            params.append(provider)
+        
+        query += ' GROUP BY DATE(down_time) ORDER BY date'
+        
+        stats = conn.execute(query, params).fetchall()
+        conn.close()
+        
+        return jsonify([dict(row) for row in stats])
+    except Exception as e:
+        logger.error(f"Error getting trend stats: {e}")
+        return jsonify({"error": str(e)}), 500
+# Google Maps helper
+def get_map_url(lat, lon):
+    if lat and lon:
+        return f"https://www.google.com/maps?q={lat},{lon}"
+    return None
+
+# Scheduler setup
+# User management endpoints
+@app.route('/api/users', methods=['GET'])
+@admin_required
+def get_users():
+    """Get all users (admin+ only)"""
+    try:
+        conn = db_manager.get_connection()
+        users = conn.execute('SELECT id, username, role, created_at FROM users').fetchall()
+        conn.close()
+        return jsonify([dict(row) for row in users])
+    except Exception as e:
+        logger.error(f"Error getting users: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/users', methods=['POST'])
+@admin_required
+def create_user():
+    """Create new user (admin+ only)"""
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role', 'viewer')
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password required"}), 400
+    
+    if role not in ['super_admin', 'admin', 'viewer']:
+        return jsonify({"error": "Invalid role"}), 400
+    
+    if role == 'super_admin' and session.get('role') != 'super_admin':
+        return jsonify({"error": "Only super admin can create super admin"}), 403
+    
+    try:
+        conn = db_manager.get_connection()
+        
+        existing = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({"error": "Username already exists"}), 400
+        
+        from werkzeug.security import generate_password_hash
+        password_hash = generate_password_hash(password)
+        cursor = conn.execute('''
+            INSERT INTO users (username, password_hash, role)
+            VALUES (?, ?, ?)
+        ''', (username, password_hash, role))
+        conn.commit()
+        new_id = cursor.lastrowid
+        conn.close()
+        
+        log_audit('CREATE', 'users', new_id, None, {'username': username, 'role': role})
+        
+        return jsonify({"message": "User created", "id": new_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/users/<int:user_id>', methods=['PUT'])
+@admin_required
+def update_user(user_id):
+    """Update user (admin+ only)"""
+    data = request.get_json()
+    
+    try:
+        conn = db_manager.get_connection()
+        
+        old_user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        if not old_user:
+            conn.close()
+            return jsonify({"error": "User not found"}), 404
+        
+        if old_user['role'] == 'super_admin' and session.get('role') != 'super_admin':
+            conn.close()
+            return jsonify({"error": "Cannot modify super admin"}), 403
+        
+        new_role = data.get('role', old_user['role'])
+        if new_role not in ['super_admin', 'admin', 'viewer']:
+            conn.close()
+            return jsonify({"error": "Invalid role"}), 400
+        
+        if new_role == 'super_admin' and session.get('role') != 'super_admin':
+            conn.close()
+            return jsonify({"error": "Only super admin can promote to super admin"}), 403
+        
+        if data.get('password'):
+            from werkzeug.security import generate_password_hash
+            password_hash = generate_password_hash(data.get('password'))
+            conn.execute('''
+                UPDATE users SET username = ?, password_hash = ?, role = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (data.get('username', old_user['username']), password_hash, new_role, user_id))
+        else:
+            conn.execute('''
+                UPDATE users SET username = ?, role = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (data.get('username', old_user['username']), new_role, user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        log_audit('UPDATE', 'users', user_id, dict(old_user), data)
+        
+        return jsonify({"message": "User updated"}), 200
+    except Exception as e:
+        logger.error(f"Error updating user {user_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@super_admin_required
+def delete_user(user_id):
+    """Delete user (super_admin only)"""
+    try:
+        conn = db_manager.get_connection()
+        
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        if not user:
+            conn.close()
+            return jsonify({"error": "User not found"}), 404
+        
+        if user['role'] == 'super_admin':
+            conn.close()
+            return jsonify({"error": "Cannot delete super admin"}), 403
+        
+        if user['id'] == session.get('user_id'):
+            conn.close()
+            return jsonify({"error": "Cannot delete yourself"}), 403
+        
+        cursor = conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        conn.commit()
+        conn.close()
+        
+        log_audit('DELETE', 'users', user_id, dict(user), None)
+        
+        return jsonify({"message": "User deleted"}), 200
+    except Exception as e:
+        logger.error(f"Error deleting user {user_id}: {e}")
+        return jsonify({"error": str(e)}), 500
 def health_check():
     return jsonify({"status": "OK", "timestamp": datetime.now().isoformat()}), 200
               data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
@@ -663,6 +948,19 @@ def generate_whatsapp_url():
     whatsapp_url = f"https://wa.me/{phone}?text={encoded_message}"
     
     return jsonify({"url": whatsapp_url, "message": message, "phone": phone})
+@app.route('/api/audit/log', methods=['GET'])
+@login_required
+def get_audit_log():
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        conn = db_manager.get_connection()
+        logs = conn.execute('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 100').fetchall()
+        conn.close()
+        return jsonify([dict(row) for row in logs])
+    except Exception as e:
+        logger.error(f"Error getting audit log: {e}")
+        return jsonify({"error": str(e)}), 500
     if session.get('role') not in ['admin', 'super_admin']:
         return jsonify({"error": "Admin access required"}), 403
     try:
@@ -764,6 +1062,66 @@ def create_router():
               data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
               data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
               data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'))
+        conn.commit()
+        new_id = cursor.lastrowid
+        conn.close()
+        log_audit('CREATE', 'routers', new_id, None, data)
+        return jsonify({"message": "Router created", "id": new_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating router: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Scheduler setup
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    scheduler = BackgroundScheduler()
+        return jsonify({"error": str(e)}), 500
+
+# Scheduler setup
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+# Scheduler setup
+try:
+        return jsonify({"error": str(e)}), 500
+
+# Scheduler setup
+        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
+# Scheduler setup
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    scheduler = BackgroundScheduler()
+    
+    @scheduler.scheduled_job('interval', seconds=60)
+    def scheduled_monitor():
+        try:
+            check_all_routers()
+        except Exception as e:
+            logger.error(f"Monitoring error: {e}")
+    
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown())
+    logger.info("Scheduler started (60s interval)")
+except Exception as e:
+    logger.warning(f"Scheduler not available: {e}")
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
             INSERT INTO routers (site, name, ip, provider, access_type, 
                                nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
                                pic_name, pic_phone, pic_provider_phone)
