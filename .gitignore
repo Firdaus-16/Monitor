@@ -1,0 +1,40 @@
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/monitoring.db
+
+# Uploads
+uploads/
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+
+# Docker
+.docker/

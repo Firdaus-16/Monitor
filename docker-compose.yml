@@ -1,0 +1,47 @@
+version: '3.8'
+
+# Enterprise SD-WAN Monitoring System - Docker Compose
+# Dual-provider infrastructure for Bank Kalsel (67 branches)
+# Provider networks: Lintasarta/Versa & ICON/Starlink
+
+services:
+  sdwan-monitor:
+    build: .
+    container_name: bank-kalsel-sdwan
+    ports:
+      - "5000:5000"
+    volumes:
+      # Data persistence
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./uploads:/app/uploads
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_PATH=/app/data/monitoring.db
+    restart: unless-stopped
+    networks:
+      - monitoring_network
+
+  # Optional: Redis for caching and session management (uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: bank-kalsel-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - monitoring_network
+
+networks:
+  monitoring_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes for persistent data
+volumes:
+  redis_data:
+    driver: local

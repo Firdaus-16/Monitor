@@ -1,0 +1,23 @@
+# Enterprise SD-WAN Monitoring System Requirements
+Flask==2.3.3
+Werkzeug==2.3.7
+pandas==2.1.4
+openpyxl==3.11.2
+python-telegram-bot==20.7.0
+# Note: sqlite3 is built-in and included in Python standard library
+matplotlib==3.8.0
+seaborn==0.12.2
+apscheduler==3.10.4
+requests==2.31.0
+pytz==2023.3
+# Enterprise SD-WAN Monitoring System Requirements
+Flask==2.3.3
+Werkzeug==2.3.7
+pandas==2.1.4
+openpyxl==3.11.2
+python-telegram-bot==20.7.0
+sqlite3==0.0.1  # Built-in, included for documentation
+matplotlib==3.8.0
+seaborn==0.12.2
+psycopg2-binary==2.9.9  # For potential PostgreSQL support
+requests==2.31.0
