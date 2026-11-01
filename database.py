@@ -59,6 +59,14 @@ class DatabaseManager:
                     router_versa_regist TEXT,
                     psu_regist TEXT,
                     pic_name TEXT,
+                    pic_phone TEXT,
+                    pic_provider_phone TEXT,
+                    timezone TEXT DEFAULT 'Asia/Makassar',
+                    router_versa_name TEXT,
+                    router_model TEXT,
+                    router_versa_regist TEXT,
+                    psu_regist TEXT,
+                    pic_name TEXT,
                     timezone TEXT DEFAULT 'Asia/Makassar',
                     pic_name TEXT,
                     pic_phone TEXT,
@@ -184,6 +192,42 @@ class DatabaseManager:
                 ('Umum ICON', 'provider_icon', 'Halo, mohon bantuan cek link ICON di {site}. IP: {ip}'),
             ]
             for name, type_, content in templates:
+                cursor = conn.execute('SELECT id FROM message_templates WHERE name = ? AND type = ?', (name, type_))
+                if cursor.fetchone() is None:
+                    conn.execute('INSERT INTO message_templates (name, type, content) VALUES (?, ?, ?)', (name, type_, content))
+            
+            conn.commit()
+            logger.info(f"Database initialized at {self.db_path}")
+            return True
+            
+        except sqlite3.Error as e:
+            logger.error(f"Database init failed: {e}")
+            return False
+        finally:
+            conn.close()
+
+if __name__ == "__main__":
+    db = DatabaseManager()
+    if db.init_db():
+        print("Database initialization completed successfully!")
+    else:
+        print("Database initialization failed!")
+        exit(1)
+            for name, type_, content in templates:
+if __name__ == "__main__":
+    db = DatabaseManager()
+    if db.init_db():
+        print("Database initialization completed successfully!")
+    else:
+        print("Database initialization failed!")
+        exit(1)
+if __name__ == "__main__":
+    db = DatabaseManager()
+    if db.init_db():
+        print("Database initialization completed successfully!")
+    else:
+        print("Database initialization failed!")
+        exit(1)
                 cursor = conn.execute('SELECT id FROM message_templates WHERE name = ? AND type = ?', (name, type_))
                 if cursor.fetchone() is None:
                     conn.execute('INSERT INTO message_templates (name, type, content) VALUES (?, ?, ?)', (name, type_, content))

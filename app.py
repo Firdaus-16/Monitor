@@ -960,6 +960,9 @@ def get_audit_log():
         return jsonify([dict(row) for row in logs])
     except Exception as e:
         logger.error(f"Error getting audit log: {e}")
+    except Exception as e:
+        logger.error(f"Error getting audit log: {e}")
+        return jsonify({"error": str(e)}), 500
         return jsonify({"error": str(e)}), 500
     if session.get('role') not in ['admin', 'super_admin']:
         return jsonify({"error": "Admin access required"}), 403
@@ -1089,6 +1092,7 @@ try:
         return jsonify({"error": str(e)}), 500
 
 # Scheduler setup
+# Scheduler setup
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
     scheduler = BackgroundScheduler()
@@ -1103,6 +1107,35 @@ try:
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown())
     logger.info("Scheduler started (60s interval)")
+except Exception as e:
+    logger.warning(f"Scheduler not available: {e}")
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    scheduler = BackgroundScheduler()
+    
+    @scheduler.scheduled_job('interval', seconds=60)
+    def scheduled_monitor():
+        try:
+            check_all_routers()
+        except Exception as e:
+            logger.error(f"Monitoring error: {e}")
+    
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown())
+    logger.info("Scheduler started (60s interval)")
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
 except Exception as e:
     logger.warning(f"Scheduler not available: {e}")
 
