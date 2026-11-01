@@ -21,7 +21,6 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 db_manager = DatabaseManager()
 
-@app.before_first_request
 def initialize_database():
     if not os.path.exists(db_manager.db_path):
         logger.info("Initializing database...")
@@ -29,6 +28,8 @@ def initialize_database():
             logger.info("Database initialized successfully")
         else:
             logger.error("Failed to initialize database")
+
+initialize_database()
 
 def login_required(f):
     from functools import wraps
