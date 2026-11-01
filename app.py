@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Enterprise SD-WAN Monitoring System - Main Application
 """
@@ -105,18 +105,6 @@ def update_router(ip):
         conn = db_manager.get_connection()
         old_router = conn.execute('SELECT * FROM routers WHERE ip = ?', (ip,)).fetchone()
         old_value = dict(old_router) if old_router else None
-            UPDATE routers SET site = ?, name = ?, ip = ?, provider = ?, 
-                access_type = ?, nojar_cpe_versa = ?, nojar_starlink = ?,
-                latitude = ?, longitude = ?, timezone = ?, 
-                router_versa_name = ?, router_model = ?, router_versa_regist = ?, psu_regist = ?,
-                pic_name = ?, pic_phone = ?, pic_provider_phone = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE ip = ?
-        ''', (data.get('site'), data.get('name'), data.get('ip'), data.get('provider'),
-              data.get('access_type'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
-              data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
-              data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
-              data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), 
-              data.get('pic_provider_phone'), ip))
         cursor = conn.execute('''
             UPDATE routers SET site = ?, name = ?, ip = ?, provider = ?, 
                 access_type = ?, nojar_cpe_versa = ?, nojar_starlink = ?,
@@ -130,16 +118,6 @@ def update_router(ip):
               data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
               data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), 
               data.get('pic_provider_phone'), ip))
-        cursor = conn.execute('''
-            UPDATE routers SET site = ?, name = ?, ip = ?, provider = ?, 
-                access_type = ?, nojar_cpe_versa = ?, nojar_starlink = ?,
-                latitude = ?, longitude = ?, timezone = ?, pic_name = ?, 
-                pic_phone = ?, pic_provider_phone = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE ip = ?
-        ''', (data.get('site'), data.get('name'), data.get('ip'), data.get('provider'),
-              data.get('access_type'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
-              data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
-              data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'), ip))
         conn.commit()
         conn.close()
         if cursor.rowcount == 0:
@@ -149,14 +127,6 @@ def update_router(ip):
     except Exception as e:
         logger.error(f"Error updating router {ip}: {e}")
         return jsonify({"error": str(e)}), 500
-        logger.error(f"Error updating router {ip}: {e}")
-        return jsonify({"error": str(e)}), 500
-            INSERT INTO routers (site, name, ip, provider, access_type, 
-                               nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
-                               router_versa_name, router_model, router_versa_regist, psu_regist,
-                               pic_name, pic_phone, pic_provider_phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-
 @app.route('/api/routers/<ip>', methods=['DELETE'])
 @admin_required
 def delete_router(ip):
@@ -164,27 +134,17 @@ def delete_router(ip):
         conn = db_manager.get_connection()
         old_router = conn.execute('SELECT * FROM routers WHERE ip = ?', (ip,)).fetchone()
         old_value = dict(old_router) if old_router else None
-              data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
-              data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
-              data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'))
         cursor = conn.execute('DELETE FROM routers WHERE ip = ?', (ip,))
         conn.commit()
         conn.close()
         if cursor.rowcount == 0:
             return jsonify({"error": "Router not found"}), 404
-              data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'))
         log_audit('DELETE', 'routers', ip, old_value, None)
         return jsonify({"message": "Router deleted"}), 200
     except Exception as e:
         logger.error(f"Error deleting router {ip}: {e}")
         return jsonify({"error": str(e)}), 500
 
-            UPDATE routers SET site = ?, name = ?, ip = ?, provider = ?, 
-                access_type = ?, nojar_cpe_versa = ?, nojar_starlink = ?,
-                latitude = ?, longitude = ?, timezone = ?, 
-                router_versa_name = ?, router_model = ?, router_versa_regist = ?, psu_regist = ?,
-                pic_name = ?, pic_phone = ?, pic_provider_phone = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE ip = ?
 @app.route('/api/health', methods=['GET'])
 @login_required
 # Map & Stats endpoints
@@ -474,10 +434,6 @@ def delete_user(user_id):
         return jsonify({"error": str(e)}), 500
 def health_check():
     return jsonify({"status": "OK", "timestamp": datetime.now().isoformat()}), 200
-              data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
-              data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
-              data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), 
-              data.get('pic_provider_phone'), ip))
 
 @app.route('/api/user/info', methods=['GET'])
 @login_required
@@ -518,6 +474,7 @@ def test_telegram():
 @app.route('/api/audit/log', methods=['GET'])
 @login_required
 def get_audit_log():
+    return jsonify([])
 # WhatsApp template endpoints
 @app.route('/api/whatsapp/templates', methods=['GET'])
 @login_required
@@ -1006,28 +963,6 @@ def get_routers():
     try:
         conn = db_manager.get_connection()
         cursor = conn.execute('SELECT * FROM routers')
-        cursor = conn.execute('''
-            INSERT INTO routers (site, name, ip, provider, access_type, 
-                               nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
-                               router_versa_name, router_model, router_versa_regist, psu_regist,
-                               pic_name, pic_phone, pic_provider_phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (data.get('site'), data.get('name'), data.get('ip'), data.get('provider'),
-              data.get('access_type'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
-              data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
-              data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
-              data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'))
-        cursor = conn.execute('''
-            INSERT INTO routers (site, name, ip, provider, access_type, 
-                               nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
-                               router_versa_name, router_model, router_versa_regist, psu_regist,
-                               pic_name, pic_phone, pic_provider_phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (data.get('site'), data.get('name'), data.get('ip'), data.get('provider'),
-              data.get('access_type'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
-              data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
-              data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
-              data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'))
         routers = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return jsonify(routers)
@@ -1064,7 +999,7 @@ def create_router():
               data.get('access_type'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
               data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
               data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
-              data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'))
+              data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone')))
         conn.commit()
         new_id = cursor.lastrowid
         conn.close()
@@ -1074,25 +1009,6 @@ def create_router():
         logger.error(f"Error creating router: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Scheduler setup
-try:
-    from apscheduler.schedulers.background import BackgroundScheduler
-    scheduler = BackgroundScheduler()
-        return jsonify({"error": str(e)}), 500
-
-# Scheduler setup
-try:
-    from apscheduler.schedulers.background import BackgroundScheduler
-# Scheduler setup
-try:
-        return jsonify({"error": str(e)}), 500
-
-# Scheduler setup
-        return jsonify({"error": str(e)}), 500
-        return jsonify({"error": str(e)}), 500
-
-# Scheduler setup
-# Scheduler setup
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
     scheduler = BackgroundScheduler()
@@ -1112,62 +1028,3 @@ except Exception as e:
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-try:
-    from apscheduler.schedulers.background import BackgroundScheduler
-    scheduler = BackgroundScheduler()
-    
-    @scheduler.scheduled_job('interval', seconds=60)
-    def scheduled_monitor():
-        try:
-            check_all_routers()
-        except Exception as e:
-            logger.error(f"Monitoring error: {e}")
-    
-    scheduler.start()
-    atexit.register(lambda: scheduler.shutdown())
-    logger.info("Scheduler started (60s interval)")
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-except Exception as e:
-    logger.warning(f"Scheduler not available: {e}")
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
-            INSERT INTO routers (site, name, ip, provider, access_type, 
-                               nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
-                               pic_name, pic_phone, pic_provider_phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (data.get('site'), data.get('name'), data.get('ip'), data.get('provider'),
-              data.get('access_type'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
-              data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
-              data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone')))
-        conn.commit()
-        new_id = cursor.lastrowid
-        conn.close()
-        log_audit('CREATE', 'routers', new_id, None, data)
-        return jsonify({"message": "Router created", "id": new_id}), 201
-    except Exception as e:
-        logger.error(f"Error creating router: {e}")
-        return jsonify({"error": str(e)}), 500
