@@ -1,6 +1,7 @@
-﻿# Enterprise SD-WAN Monitoring System Requirements
+# Enterprise SD-WAN Monitoring System Requirements
 Flask==2.3.3
 Werkzeug==2.3.7
+gunicorn==21.2.0
 pandas==2.1.4
 openpyxl==3.1.5
 python-telegram-bot==20.7.0

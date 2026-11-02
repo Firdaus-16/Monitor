@@ -1,5 +1,5 @@
-﻿#!/usr/bin/env python3
-"""Database module"""
+#!/usr/bin/env python3
+"""Database module for Enterprise SD-WAN Monitoring System"""
 import os
 import sqlite3
 import logging
@@ -11,22 +11,29 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     def __init__(self, db_path=None):
         if db_path is None:
-            db_path = os.path.join(os.path.dirname(__file__), 'data', 'monitoring.db')
+            db_path = os.environ.get('DATABASE_PATH') or os.path.join(os.path.dirname(__file__), 'data', 'monitoring.db')
         self.db_path = db_path
         self._ensure_data_directory()
 
     def _ensure_data_directory(self):
         data_dir = os.path.dirname(self.db_path)
-        os.makedirs(data_dir, exist_ok=True)
+        if data_dir:
+            os.makedirs(data_dir, exist_ok=True)
 
     def get_connection(self):
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
         return conn
 
     def init_db(self):
         try:
             conn = self.get_connection()
+            # Enable WAL mode for better concurrency in multi-process/threaded environments
+            try:
+                conn.execute('PRAGMA journal_mode=WAL;')
+            except Exception:
+                pass
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +72,7 @@ class DatabaseManager:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS downtime_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    site TEXT,
                     name TEXT NOT NULL,
                     ip TEXT NOT NULL,
                     provider TEXT NOT NULL,
@@ -78,6 +86,7 @@ class DatabaseManager:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS latency_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    site TEXT,
                     name TEXT NOT NULL,
                     ip TEXT NOT NULL,
                     provider TEXT NOT NULL,
@@ -143,6 +152,26 @@ class DatabaseManager:
                 )
             ''')
 
+            # Migrations: Ensure existing tables have the 'site' column
+            try:
+                cursor = conn.execute("PRAGMA table_info(downtime_history)")
+                downtime_cols = [row['name'] for row in cursor.fetchall()]
+                if 'site' not in downtime_cols:
+                    conn.execute("ALTER TABLE downtime_history ADD COLUMN site TEXT")
+                    logger.info("Migrated downtime_history: added 'site' column")
+            except Exception as e:
+                logger.warning(f"Could not verify 'site' column in downtime_history: {e}")
+
+            try:
+                cursor = conn.execute("PRAGMA table_info(latency_history)")
+                latency_cols = [row['name'] for row in cursor.fetchall()]
+                if 'site' not in latency_cols:
+                    conn.execute("ALTER TABLE latency_history ADD COLUMN site TEXT")
+                    logger.info("Migrated latency_history: added 'site' column")
+            except Exception as e:
+                logger.warning(f"Could not verify 'site' column in latency_history: {e}")
+
+            # Default users
             users = [
                 ('superadmin', 'superadmin123', 'super_admin'),
                 ('admin', 'admin123', 'admin'),
@@ -153,8 +182,9 @@ class DatabaseManager:
                 if cursor.fetchone() is None:
                     password_hash = generate_password_hash(password)
                     conn.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', (username, password_hash, role))
-                    logger.info(f"Default user created: {username}/{password} ({role})")
+                    logger.info(f"Default user created: {username} ({role})")
 
+            # Default settings
             default_settings = [
                 ('monitoring_enabled', 'true', 'Enable/disable monitoring system'),
                 ('alert_threshold_ms', '150', 'Latency threshold in milliseconds for alerts'),
@@ -170,8 +200,26 @@ class DatabaseManager:
                 if cursor.fetchone() is None:
                     conn.execute('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)', (key, value, description))
 
+            # Default WhatsApp message templates
+            default_templates = [
+                (
+                    'Eskalasi Gangguan ke PIC Cabang',
+                    'pic',
+                    'Halo Bapak/Ibu {pic_name} di Cabang {site}, kami mendeteksi link jaringan sedang DOWN (IP: {ip}, Nojar Versa: {nojar_versa}, Nojar Starlink: {nojar_starlink}). Mohon konfirmasi apakah ada kendala listrik/perangkat di lokasi. Terima kasih.'
+                ),
+                (
+                    'Laporan Gangguan ke NOC Provider',
+                    'provider',
+                    'Yth. Helpdesk Provider, mohon open tiket gangguan link di Bank Kalsel Cabang {site}. IP: {ip}, Nojar Versa: {nojar_versa}, Nojar Starlink: {nojar_starlink}. Mohon segera dicek dari sisi provider. Terima kasih.'
+                ),
+            ]
+            for name, tmpl_type, content in default_templates:
+                cursor = conn.execute('SELECT id FROM message_templates WHERE name = ? AND type = ?', (name, tmpl_type))
+                if cursor.fetchone() is None:
+                    conn.execute('INSERT INTO message_templates (name, type, content) VALUES (?, ?, ?)', (name, tmpl_type, content))
+
             conn.commit()
-            logger.info(f"Database initialized at {self.db_path}")
+            logger.info(f"Database initialized successfully at {self.db_path}")
             return True
         except sqlite3.Error as e:
             logger.error(f"Database init failed: {e}")

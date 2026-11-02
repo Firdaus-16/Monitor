@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Enterprise SD-WAN Monitoring System - Importer Module"""
 
 import pandas as pd
@@ -49,27 +49,22 @@ class BranchImporter:
         if db_manager is None:
             db_manager = DatabaseManager()
         self.db_manager = db_manager
-        self.expected_columns = [
-            'Site/Cabang', 'IP Lintas', 'IP ICON', 'Access Type',
-            'Nojar Versa', 'Nojar Starlink', 'Lat', 'Long',
-            'Nama PIC', 'No WA PIC', 'No WA Provider'
-        ]
 
     def import_branches_from_excel(self, filepath):
         if not os.path.exists(filepath):
-            return {"success": False, "error": "File not found"}
+            return {"success": False, "error": f"File not found: {filepath}"}
 
         try:
             df = pd.read_excel(filepath, dtype=str)
             df = self._normalize_columns(df)
 
-            required = ['site', 'ip_lintas', 'ip_icon', 'access_type']
-            missing = [col for col in required if col not in df.columns]
+            required_check = ['site']
+            missing = [col for col in required_check if col not in df.columns]
             if missing:
-                return {"success": False, "error": f"Missing columns: {missing}"}
+                return {"success": False, "error": f"Missing required column: {missing}"}
 
-            cleaned_data = self._clean_excel_data(df)
-            import_result = self._import_to_database(cleaned_data)
+            routers_to_import = self._prepare_routers(df)
+            import_result = self._import_to_database(routers_to_import)
 
             logger.info(f"Import completed: {import_result}")
             return {"success": True, "results": import_result}
@@ -103,103 +98,34 @@ class BranchImporter:
             return ''
         return text
 
-    def _clean_excel_data(self, df):
-        df_clean = self._normalize_columns(df.copy())
+    def _slugify(self, text):
+        return str(text).replace('/', '_').replace(' ', '_').replace('-', '_').lower()
 
-        # Ensure the normalized schema is complete even for partial Excel files.
-        for standard in self.COLUMN_MAPPING:
-            if standard not in df_clean.columns:
-                if standard in ('lat', 'long'):
-                    df_clean[standard] = pd.NA
-                else:
-                    df_clean[standard] = ''
-
-        site_mask = df_clean['site'].apply(lambda value: '' if pd.isna(value) else str(value).strip())
-        df_clean = df_clean[site_mask != '']
-
-        string_columns = [col for col in self.COLUMN_MAPPING if col not in ('lat', 'long')]
-        for col in string_columns:
-            if col in df_clean.columns:
-                df_clean[col] = df_clean[col].fillna('').astype(str).str.strip()
-                df_clean[col] = df_clean[col].replace({'nan': '', 'None': '', '<NA>': ''})
-
-        if 'lat' in df_clean.columns:
-            df_clean['lat'] = pd.to_numeric(df_clean['lat'], errors='coerce')
-        if 'long' in df_clean.columns:
-            df_clean['long'] = pd.to_numeric(df_clean['long'], errors='coerce')
-
-        df_clean['timezone'] = df_clean.apply(
-            lambda row: detect_timezone(row['lat'], row['long']), axis=1
-        )
-        df_clean['provider'] = df_clean.apply(self._determine_provider, axis=1)
-        df_clean['name'] = df_clean['site'].apply(self._create_router_name)
-        df_clean['ip'] = df_clean.apply(self._get_primary_ip, axis=1)
-
-        return df_clean
-
-    def _determine_provider(self, row):
-        ip_lintas = self._cell(row, 'ip_lintas')
-        ip_icon = self._cell(row, 'ip_icon')
-
-        if ip_lintas and ip_icon:
-            return 'both'
-        elif ip_lintas:
-            return 'lintasarta'
-        elif ip_icon:
-            return 'icon'
-        else:
-            return 'unknown'
-
-    def _create_router_name(self, site_name):
-        site_name = '' if pd.isna(site_name) else str(site_name)
-        return f"router-{site_name.replace('/', '_').replace(' ', '_').lower()}"
-
-    def _get_primary_ip(self, row):
-        ip_lintas = self._cell(row, 'ip_lintas')
-        ip_icon = self._cell(row, 'ip_icon')
-
-        if ip_lintas:
-            return ip_lintas
-        elif ip_icon:
-            return ip_icon
-        else:
-            return ''
-
-    def _import_to_database(self, df):
-        if hasattr(self.db_manager, 'init_db'):
-            try:
-                self.db_manager.init_db()
-            except Exception:
-                pass
-
-        conn = self.db_manager.get_connection()
-
-        inserted_count = 0
-        updated_count = 0
-
+    def _prepare_routers(self, df):
+        """Extract individual router items (1 or 2 per branch row for dual provider)."""
+        router_list = []
         for _, row in df.iterrows():
-            name = self._cell(row, 'name')
-            ip = self._cell(row, 'ip')
-            provider = self._cell(row, 'provider')
-
-            existing = conn.execute(
-                'SELECT * FROM routers WHERE (name = ? AND ip = ? AND provider = ?)',
-                (name, ip, provider)
-            ).fetchone()
-
             site = self._cell(row, 'site')
-            access_type = self._cell(row, 'access_type')
+            if not site:
+                continue
+
+            ip_lintas = self._cell(row, 'ip_lintas')
+            ip_icon = self._cell(row, 'ip_icon')
+            access_type = self._cell(row, 'access_type') or 'SD-WAN'
             nojar_versa = self._cell(row, 'nojar_versa')
             nojar_starlink = self._cell(row, 'nojar_starlink')
 
-            latitude = row['lat'] if 'lat' in row else None
-            longitude = row['long'] if 'long' in row else None
-            if pd.isna(latitude):
-                latitude = None
-            if pd.isna(longitude):
-                longitude = None
+            # Latitude and Longitude parsing
+            try:
+                lat = float(row['lat']) if 'lat' in row and not pd.isna(row['lat']) else None
+            except (ValueError, TypeError):
+                lat = None
+            try:
+                lon = float(row['long']) if 'long' in row and not pd.isna(row['long']) else None
+            except (ValueError, TypeError):
+                lon = None
 
-            timezone = self._cell(row, 'timezone') or 'Asia/Makassar'
+            timezone = detect_timezone(lat, lon)
             router_versa_name = self._cell(row, 'router_versa_name')
             router_model = self._cell(row, 'router_model')
             router_versa_regist = self._cell(row, 'router_versa_regist')
@@ -208,22 +134,85 @@ class BranchImporter:
             pic_phone = self._cell(row, 'pic_phone')
             pic_provider_phone = self._cell(row, 'pic_provider_phone')
 
+            site_slug = self._slugify(site)
+
+            # 1. Lintasarta Router
+            if ip_lintas:
+                router_list.append({
+                    'site': site,
+                    'name': f"router-{site_slug}-lintasarta",
+                    'ip': ip_lintas,
+                    'provider': 'lintasarta',
+                    'access_type': access_type,
+                    'nojar_cpe_versa': nojar_versa,
+                    'nojar_starlink': nojar_starlink,
+                    'latitude': lat,
+                    'longitude': lon,
+                    'timezone': timezone,
+                    'router_versa_name': router_versa_name,
+                    'router_model': router_model,
+                    'router_versa_regist': router_versa_regist,
+                    'psu_regist': psu_regist,
+                    'pic_name': pic_name,
+                    'pic_phone': pic_phone,
+                    'pic_provider_phone': pic_provider_phone
+                })
+
+            # 2. ICON / Starlink Router
+            if ip_icon:
+                router_list.append({
+                    'site': site,
+                    'name': f"router-{site_slug}-icon",
+                    'ip': ip_icon,
+                    'provider': 'icon',
+                    'access_type': access_type,
+                    'nojar_cpe_versa': nojar_versa,
+                    'nojar_starlink': nojar_starlink,
+                    'latitude': lat,
+                    'longitude': lon,
+                    'timezone': timezone,
+                    'router_versa_name': router_versa_name,
+                    'router_model': router_model,
+                    'router_versa_regist': router_versa_regist,
+                    'psu_regist': psu_regist,
+                    'pic_name': pic_name,
+                    'pic_phone': pic_phone,
+                    'pic_provider_phone': pic_provider_phone
+                })
+
+        return router_list
+
+    def _import_to_database(self, routers):
+        if hasattr(self.db_manager, 'init_db'):
+            try:
+                self.db_manager.init_db()
+            except Exception:
+                pass
+
+        conn = self.db_manager.get_connection()
+        inserted_count = 0
+        updated_count = 0
+
+        for r in routers:
+            existing = conn.execute(
+                'SELECT id FROM routers WHERE (name = ? AND ip = ? AND provider = ?)',
+                (r['name'], r['ip'], r['provider'])
+            ).fetchone()
+
             if existing:
                 conn.execute('''
                     UPDATE routers
-                    SET site = ?, name = ?, ip = ?, provider = ?,
-                        access_type = ?, nojar_cpe_versa = ?, nojar_starlink = ?,
+                    SET site = ?, access_type = ?, nojar_cpe_versa = ?, nojar_starlink = ?,
                         latitude = ?, longitude = ?, timezone = ?,
                         router_versa_name = ?, router_model = ?, router_versa_regist = ?, psu_regist = ?,
                         pic_name = ?, pic_phone = ?, pic_provider_phone = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE name = ? AND ip = ? AND provider = ?
                 ''', (
-                    site, name, ip, provider,
-                    access_type, nojar_versa, nojar_starlink,
-                    latitude, longitude, timezone,
-                    router_versa_name, router_model, router_versa_regist, psu_regist,
-                    pic_name, pic_phone, pic_provider_phone,
-                    name, ip, provider
+                    r['site'], r['access_type'], r['nojar_cpe_versa'], r['nojar_starlink'],
+                    r['latitude'], r['longitude'], r['timezone'],
+                    r['router_versa_name'], r['router_model'], r['router_versa_regist'], r['psu_regist'],
+                    r['pic_name'], r['pic_phone'], r['pic_provider_phone'],
+                    r['name'], r['ip'], r['provider']
                 ))
                 updated_count += 1
             else:
@@ -235,11 +224,10 @@ class BranchImporter:
                      pic_name, pic_phone, pic_provider_phone)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    site, name, ip, provider,
-                    access_type, nojar_versa, nojar_starlink,
-                    latitude, longitude, timezone,
-                    router_versa_name, router_model, router_versa_regist, psu_regist,
-                    pic_name, pic_phone, pic_provider_phone
+                    r['site'], r['name'], r['ip'], r['provider'], r['access_type'],
+                    r['nojar_cpe_versa'], r['nojar_starlink'], r['latitude'], r['longitude'], r['timezone'],
+                    r['router_versa_name'], r['router_model'], r['router_versa_regist'], r['psu_regist'],
+                    r['pic_name'], r['pic_phone'], r['pic_provider_phone']
                 ))
                 inserted_count += 1
 
@@ -249,7 +237,7 @@ class BranchImporter:
         return {
             "inserted": inserted_count,
             "updated": updated_count,
-            "total": len(df)
+            "total_routers": len(routers)
         }
 
 def main():
