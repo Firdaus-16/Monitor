@@ -1018,5 +1018,10 @@ def init_scheduler():
 init_scheduler()
 
 if __name__ == '__main__':
-    # Listen on all interfaces on port 5000
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Gunakan port 5050 (atau konfigurasi PORT) agar terhindar dari bentrok proses lama di port 5000
+    port = int(os.environ.get('PORT', 5050))
+    print(f"\n=======================================================")
+    print(f"  SD-WAN Monitoring Server aktif di: http://localhost:{port}")
+    print(f"  Login: admin / admin123")
+    print(f"=======================================================\n")
+    app.run(host='0.0.0.0', port=port, debug=False)
