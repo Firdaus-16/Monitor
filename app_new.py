@@ -36,7 +36,7 @@ def login_required(f):
         if 'user_id' not in session:
             if request.path.startswith('/api/'):
                 return jsonify({"error": "Unauthorized"}), 401
-            return redirect(url_for('login'))
+            return redirect('/login')
         return f(*args, **kwargs)
     return decorated_function
 
@@ -46,7 +46,7 @@ def admin_required(f):
         if 'user_id' not in session:
             if request.path.startswith('/api/'):
                 return jsonify({"error": "Unauthorized"}), 401
-            return redirect(url_for('login'))
+            return redirect('/login')
         if session.get('role') not in ['admin', 'super_admin']:
             return jsonify({"error": "Admin access required"}), 403
         return f(*args, **kwargs)
@@ -58,7 +58,7 @@ def super_admin_required(f):
         if 'user_id' not in session:
             if request.path.startswith('/api/'):
                 return jsonify({"error": "Unauthorized"}), 401
-            return redirect(url_for('login'))
+            return redirect('/login')
         if session.get('role') != 'super_admin':
             return jsonify({"error": "Super admin access required"}), 403
         return f(*args, **kwargs)
@@ -100,7 +100,7 @@ def login():
             session['username'] = user['username']
             session['role'] = user['role']
             log_audit('LOGIN', 'users', user['id'])
-            return redirect(url_for('index'))
+            return redirect('/')
         else:
             return render_template('login.html', error='Username atau password salah.')
     return render_template('login.html')
@@ -109,7 +109,7 @@ def login():
 def logout():
     log_audit('LOGOUT', 'users', session.get('user_id'))
     session.clear()
-    return redirect(url_for('login'))
+    return redirect('/login')
 
 @app.route('/api/user/info', methods=['GET'])
 @login_required
