@@ -148,6 +148,9 @@ def delete_router(ip):
 
 @app.route('/api/health', methods=['GET'])
 @login_required
+def health_check():
+    return jsonify({"status": "OK", "timestamp": datetime.now().isoformat()}), 200
+
 # Map & Stats endpoints
 @app.route('/api/map/routers', methods=['GET'])
 @login_required
@@ -433,8 +436,6 @@ def delete_user(user_id):
     except Exception as e:
         logger.error(f"Error deleting user {user_id}: {e}")
         return jsonify({"error": str(e)}), 500
-def health_check():
-    return jsonify({"status": "OK", "timestamp": datetime.now().isoformat()}), 200
 
 @app.route('/api/user/info', methods=['GET'])
 @login_required
