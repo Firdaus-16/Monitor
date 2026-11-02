@@ -13,18 +13,21 @@
     <style>
         body { padding-top: 70px; background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .navbar { box-shadow: 0 2px 10px rgba(0,0,0,0.15); background: #1a252f; }
-        .card { border: none; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s; }
+        .card { border: none; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .stat-card { transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-3px); }
+        .badge-dual-up { background-color: #198754; color: white; }
+        .badge-partial { background-color: #ffc107; color: #212529; }
+        .badge-down { background-color: #dc3545; color: white; }
+        .badge-unknown { background-color: #6c757d; color: white; }
         .badge-provider-lintasarta { background-color: #0d6efd; color: white; }
         .badge-provider-icon { background-color: #fd7e14; color: white; }
-        .badge-status-up { background-color: #198754; color: white; }
-        .badge-status-down { background-color: #dc3545; color: white; }
-        .badge-status-unknown { background-color: #6c757d; color: white; }
-        #map { height: 450px; border-radius: 10px; z-index: 1; }
+        #map { height: 460px; width: 100%; border-radius: 8px; z-index: 1; }
         .table-responsive { max-height: 520px; overflow-y: auto; }
         .watermark { position: fixed; bottom: 10px; right: 15px; color: rgba(0,0,0,0.2); font-size: 13px; font-weight: 600; pointer-events: none; z-index: 1000; }
-        .nav-tabs .nav-link { font-weight: 600; color: #495057; }
-        .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 3px solid #0d6efd; }
+        .nav-link-tab { font-weight: 600; color: rgba(255,255,255,0.75); padding: 8px 16px; border-radius: 6px; cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-block; }
+        .nav-link-tab:hover { color: #fff; background-color: rgba(255,255,255,0.1); }
+        .nav-link-tab.active { color: #fff; background-color: #0d6efd; }
     </style>
 </head>
 <body>
@@ -42,22 +45,22 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navMenu">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-3">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-3 gap-1">
                     <li class="nav-item">
-                        <a class="nav-link active" data-bs-toggle="tab" href="#tab-dashboard"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a>
+                        <a class="nav-link-tab active" id="btn-tab-dashboard" onclick="switchTab('tab-dashboard')"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-map" onclick="invalidateMap()"><i class="bi bi-geo-alt-fill me-1"></i> Peta Cabang</a>
+                        <a class="nav-link-tab" id="btn-tab-map" onclick="switchTab('tab-map')"><i class="bi bi-geo-alt-fill me-1"></i> Peta Cabang</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-stats" onclick="loadCharts()"><i class="bi bi-bar-chart-line-fill me-1"></i> Analitik & Grafik</a>
+                        <a class="nav-link-tab" id="btn-tab-stats" onclick="switchTab('tab-stats')"><i class="bi bi-bar-chart-line-fill me-1"></i> Analitik & Grafik</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-export"><i class="bi bi-file-earmark-excel me-1"></i> Ekspor Laporan</a>
+                        <a class="nav-link-tab" id="btn-tab-export" onclick="switchTab('tab-export')"><i class="bi bi-file-earmark-excel me-1"></i> Ekspor Laporan</a>
                     </li>
                     {% if role in ['admin', 'super_admin'] %}
                     <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-settings"><i class="bi bi-gear-fill me-1"></i> Konfigurasi</a>
+                        <a class="nav-link-tab" id="btn-tab-settings" onclick="switchTab('tab-settings')"><i class="bi bi-gear-fill me-1"></i> Konfigurasi</a>
                     </li>
                     {% endif %}
                 </ul>
@@ -72,7 +75,7 @@
         </div>
     </nav>
 
-    <!-- Content Container -->
+    <!-- Main Container -->
     <div class="container-fluid px-4 mt-3">
         <!-- Top Metrics Cards -->
         <div class="row g-3 mb-4">
@@ -80,11 +83,11 @@
                 <div class="card stat-card border-start border-primary border-4 p-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <span class="text-muted text-uppercase fw-bold" style="font-size: 12px;">Total Router</span>
+                            <span class="text-muted text-uppercase fw-bold" style="font-size: 11px;">Total Cabang SD-WAN</span>
                             <h2 class="mb-0 fw-bold text-primary mt-1" id="stat-total">0</h2>
                         </div>
                         <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary fs-3">
-                            <i class="bi bi-router"></i>
+                            <i class="bi bi-buildings"></i>
                         </div>
                     </div>
                 </div>
@@ -93,7 +96,7 @@
                 <div class="card stat-card border-start border-success border-4 p-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <span class="text-muted text-uppercase fw-bold" style="font-size: 12px;">Router Online</span>
+                            <span class="text-muted text-uppercase fw-bold" style="font-size: 11px;">Dual Link Online (Normal)</span>
                             <h2 class="mb-0 fw-bold text-success mt-1" id="stat-online">0</h2>
                         </div>
                         <div class="bg-success bg-opacity-10 p-3 rounded-circle text-success fs-3">
@@ -103,268 +106,273 @@
                 </div>
             </div>
             <div class="col-xl-3 col-md-6">
-                <div class="card stat-card border-start border-danger border-4 p-3">
+                <div class="card stat-card border-start border-warning border-4 p-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <span class="text-muted text-uppercase fw-bold" style="font-size: 12px;">Router Offline / Down</span>
-                            <h2 class="mb-0 fw-bold text-danger mt-1" id="stat-down">0</h2>
+                            <span class="text-muted text-uppercase fw-bold" style="font-size: 11px;">1 Link Down (Backup Aktif)</span>
+                            <h2 class="mb-0 fw-bold text-warning mt-1" id="stat-partial">0</h2>
                         </div>
-                        <div class="bg-danger bg-opacity-10 p-3 rounded-circle text-danger fs-3">
-                            <i class="bi bi-exclamation-triangle-fill"></i>
+                        <div class="bg-warning bg-opacity-10 p-3 rounded-circle text-warning fs-3">
+                            <i class="bi bi-exclamation-circle-fill"></i>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="col-xl-3 col-md-6">
-                <div class="card stat-card border-start border-warning border-4 p-3">
+                <div class="card stat-card border-start border-danger border-4 p-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <span class="text-muted text-uppercase fw-bold" style="font-size: 12px;">High Latency (>150ms)</span>
-                            <h2 class="mb-0 fw-bold text-warning mt-1" id="stat-latency">0</h2>
+                            <span class="text-muted text-uppercase fw-bold" style="font-size: 11px;">Kedua Link Down (Total Outage)</span>
+                            <h2 class="mb-0 fw-bold text-danger mt-1" id="stat-down">0</h2>
                         </div>
-                        <div class="bg-warning bg-opacity-10 p-3 rounded-circle text-warning fs-3">
-                            <i class="bi bi-reception-3"></i>
+                        <div class="bg-danger bg-opacity-10 p-3 rounded-circle text-danger fs-3">
+                            <i class="bi bi-x-octagon-fill"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Tab Contents -->
-        <div class="tab-content">
-            <!-- TAB 1: DASHBOARD & LIVE ROUTER LIST -->
-            <div class="tab-pane fade show active" id="tab-dashboard">
-                <div class="card p-3 mb-4">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                        <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-hdd-network me-2"></i>Daftar Perangkat SD-WAN Cabang</h5>
-                        <div class="d-flex flex-wrap gap-2">
-                            <div class="input-group input-group-sm" style="width: 250px;">
-                                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                                <input type="text" id="search-input" class="form-control" placeholder="Cari Site / IP / PIC..." onkeyup="filterRouters()">
-                            </div>
-                            <select id="filter-provider" class="form-select form-select-sm" style="width: 140px;" onchange="filterRouters()">
-                                <option value="">Semua Provider</option>
-                                <option value="lintasarta">Lintasarta</option>
-                                <option value="icon">ICON</option>
-                            </select>
-                            <select id="filter-status" class="form-select form-select-sm" style="width: 130px;" onchange="filterRouters()">
-                                <option value="">Semua Status</option>
-                                <option value="up">UP / Online</option>
-                                <option value="down">DOWN</option>
-                            </select>
-                            {% if role in ['admin', 'super_admin'] %}
-                            <button class="btn btn-primary btn-sm" onclick="showAddRouterModal()"><i class="bi bi-plus-circle me-1"></i> Tambah Router</button>
-                            <button class="btn btn-outline-success btn-sm" onclick="showImportModal()"><i class="bi bi-upload me-1"></i> Upload Excel</button>
-                            {% endif %}
-                            <button class="btn btn-outline-secondary btn-sm" onclick="loadRouters()"><i class="bi bi-arrow-clockwise"></i></button>
-                        </div>
+        <!-- ==================== TAB 1: DASHBOARD & LIVE ROUTER TABLE ==================== -->
+        <div id="tab-dashboard" class="tab-content-area">
+            <div class="card p-3 mb-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div>
+                        <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-hdd-network me-2 text-primary"></i>Status Router SD-WAN Kantor Cabang</h5>
+                        <small class="text-muted">Memonitor 2 Link per Router: Lintasarta (Versa) & ICON+ (Starlink)</small>
                     </div>
-
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0" id="table-routers">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Status</th>
-                                    <th>Site / Cabang</th>
-                                    <th>Nama Router</th>
-                                    <th>IP Address</th>
-                                    <th>Provider</th>
-                                    <th>Akses</th>
-                                    <th>Nojar (Versa / Starlink)</th>
-                                    <th>PIC Cabang</th>
-                                    <th class="text-center">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody id="routers-tbody">
-                                <tr><td colspan="9" class="text-center py-4 text-muted">Memuat data router...</td></tr>
-                            </tbody>
-                        </table>
+                    <div class="d-flex flex-wrap gap-2">
+                        <div class="input-group input-group-sm" style="width: 260px;">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="search-input" class="form-control" placeholder="Cari Cabang / IP..." onkeyup="filterRouters()">
+                        </div>
+                        <select id="filter-status" class="form-select form-select-sm" style="width: 170px;" onchange="filterRouters()">
+                            <option value="">Semua Kondisi</option>
+                            <option value="dual_up">Dual Online (Normal)</option>
+                            <option value="partial">1 Link Down (Backup)</option>
+                            <option value="down">Kedua Link Down</option>
+                        </select>
+                        {% if role in ['admin', 'super_admin'] %}
+                        <button class="btn btn-primary btn-sm" onclick="showAddRouterModal()"><i class="bi bi-plus-circle me-1"></i> Tambah Router</button>
+                        <button class="btn btn-outline-success btn-sm" onclick="showImportModal()"><i class="bi bi-upload me-1"></i> Upload Excel</button>
+                        {% endif %}
+                        <button class="btn btn-outline-secondary btn-sm" onclick="loadRouters()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
                     </div>
                 </div>
-            </div>
 
-            <!-- TAB 2: MAP / GIS VIEW -->
-            <div class="tab-pane fade" id="tab-map">
-                <div class="card p-3 mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="fw-bold mb-0"><i class="bi bi-map-fill me-2 text-primary"></i>Peta Persebaran Jaringan Cabang Bank Kalsel</h5>
-                        <small class="text-muted">Titik hijau: Online | Titik merah: Offline</small>
-                    </div>
-                    <div id="map"></div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="table-routers">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Status Cabang</th>
+                                <th>Site / Kantor Cabang</th>
+                                <th>Link 1: Lintasarta (Versa)</th>
+                                <th>Link 2: ICON (Starlink)</th>
+                                <th>Nojar (Versa / Starlink)</th>
+                                <th>PIC Cabang</th>
+                                <th class="text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="routers-tbody">
+                            <tr><td colspan="7" class="text-center py-4 text-muted">Memuat data router SD-WAN...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-
-            <!-- TAB 3: STATS & CHARTS -->
-            <div class="tab-pane fade" id="tab-stats">
-                <div class="row g-3 mb-4">
-                    <div class="col-lg-8">
-                        <div class="card p-3 h-100">
-                            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-bar-chart-fill text-danger me-2"></i>Top 10 Cabang Gangguan Terbanyak</h6>
-                            <div style="height: 300px;">
-                                <canvas id="chart-downtime-site"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-4">
-                        <div class="card p-3 h-100">
-                            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-pie-chart-fill text-primary me-2"></i>Komparasi Downtime Provider</h6>
-                            <div style="height: 300px;" class="d-flex align-items-center justify-content-center">
-                                <canvas id="chart-downtime-provider"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        <div class="card p-3">
-                            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-graph-up text-success me-2"></i>Tren Gangguan Harian</h6>
-                            <div style="height: 250px;">
-                                <canvas id="chart-downtime-trend"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 4: EXPORT REPORT -->
-            <div class="tab-pane fade" id="tab-export">
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <div class="card p-4 h-100">
-                            <div class="d-flex align-items-center mb-3">
-                                <i class="bi bi-file-earmark-excel-fill text-success fs-1 me-3"></i>
-                                <div>
-                                    <h5 class="fw-bold mb-1">Laporan Riwayat Downtime</h5>
-                                    <p class="text-muted small mb-0">Format multi-sheet Excel (.xlsx) dengan ringkasan SLA provider dan detail cabang.</p>
-                                </div>
-                            </div>
-                            <form action="/api/export/downtime" method="GET" class="mt-2">
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Dari Tanggal</label>
-                                    <input type="date" name="from" class="form-control form-control-sm">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Sampai Tanggal</label>
-                                    <input type="date" name="to" class="form-control form-control-sm">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Filter Provider</label>
-                                    <select name="provider" class="form-select form-select-sm">
-                                        <option value="">Semua Provider</option>
-                                        <option value="lintasarta">Lintasarta</option>
-                                        <option value="icon">ICON</option>
-                                    </select>
-                                </div>
-                                <button type="submit" class="btn btn-success w-100 btn-sm"><i class="bi bi-download me-1"></i> Download Laporan Downtime (.xlsx)</button>
-                            </form>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <div class="card p-4 h-100">
-                            <div class="d-flex align-items-center mb-3">
-                                <i class="bi bi-speedometer text-primary fs-1 me-3"></i>
-                                <div>
-                                    <h5 class="fw-bold mb-1">Laporan Riwayat Latensi</h5>
-                                    <p class="text-muted small mb-0">Format Excel (.xlsx) berisi log uji latensi (ms), min, max, dan rata-rata performa jaringan.</p>
-                                </div>
-                            </div>
-                            <form action="/api/export/latency" method="GET" class="mt-2">
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Dari Tanggal</label>
-                                    <input type="date" name="from" class="form-control form-control-sm">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Sampai Tanggal</label>
-                                    <input type="date" name="to" class="form-control form-control-sm">
-                                </div>
-                                <button type="submit" class="btn btn-primary w-100 btn-sm"><i class="bi bi-download me-1"></i> Download Laporan Latensi (.xlsx)</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 5: SETTINGS & ADMIN (Only for Admin & Super Admin) -->
-            {% if role in ['admin', 'super_admin'] %}
-            <div class="tab-pane fade" id="tab-settings">
-                <div class="row g-4">
-                    <!-- Telegram Config -->
-                    <div class="col-lg-6">
-                        <div class="card p-4 h-100">
-                            <h5 class="fw-bold mb-3"><i class="bi bi-telegram text-info me-2"></i>Konfigurasi Telegram Alert</h5>
-                            <form id="form-telegram" onsubmit="saveTelegramConfig(event)">
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Bot Token</label>
-                                    <input type="text" id="tg-token" class="form-control form-control-sm" placeholder="Contoh: 123456789:ABCdefGhIjk...">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Chat ID Lintasarta</label>
-                                    <input type="text" id="tg-chat-lintasarta" class="form-control form-control-sm" placeholder="Grup Telegram Lintasarta">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Chat ID ICON</label>
-                                    <input type="text" id="tg-chat-icon" class="form-control form-control-sm" placeholder="Grup Telegram ICON">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Chat ID Gabungan / All</label>
-                                    <input type="text" id="tg-chat-all" class="form-control form-control-sm" placeholder="Grup Monitoring Umum">
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i> Simpan Konfigurasi</button>
-                                    <button type="button" class="btn btn-outline-info btn-sm" onclick="testTelegram('all')"><i class="bi bi-send me-1"></i> Test Kirim Alert</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Data Retention & Purge -->
-                    <div class="col-lg-6">
-                        <div class="card p-4 h-100">
-                            <h5 class="fw-bold mb-3 text-danger"><i class="bi bi-trash3-fill me-2"></i>Retensi & Pembersihan Data</h5>
-                            <p class="text-muted small">Bersihkan data log lawas secara aman untuk menjaga performa database.</p>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Tabel Target</label>
-                                <select id="purge-table" class="form-select form-select-sm">
-                                    <option value="downtime">Riwayat Downtime (downtime_history)</option>
-                                    <option value="latency">Riwayat Latensi (latency_history)</option>
-                                    <option value="runtime">Reset Status Runtime (runtime_states)</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Rentang Waktu</label>
-                                <select id="purge-filter-template" class="form-select form-select-sm">
-                                    <option value="3months">Data Lebih Dari 3 Bulan Lalu</option>
-                                    <option value="monthly">Data Lebih Dari 1 Bulan Lalu</option>
-                                    <option value="weekly">Data Lebih Dari 1 Minggu Lalu</option>
-                                </select>
-                            </div>
-                            <button type="button" class="btn btn-danger btn-sm" onclick="executePurge()"><i class="bi bi-trash me-1"></i> Bersihkan Data Sekarang</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
         </div>
+
+        <!-- ==================== TAB 2: PETA CABANG ==================== -->
+        <div id="tab-map" class="tab-content-area d-none">
+            <div class="card p-3 mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold mb-0"><i class="bi bi-map-fill me-2 text-primary"></i>Peta Persebaran Jaringan SD-WAN Bank Kalsel</h5>
+                        <small class="text-muted">Titik Hijau: Dual Online | Kuning: 1 Link Down | Merah: Total Down</small>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="initOrInvalidateMap()"><i class="bi bi-arrows-fullscreen me-1"></i> Reset Peta</button>
+                </div>
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 3: ANALITIK & GRAFIK ==================== -->
+        <div id="tab-stats" class="tab-content-area d-none">
+            <div class="row g-3 mb-4">
+                <div class="col-lg-8">
+                    <div class="card p-3 h-100">
+                        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-bar-chart-fill text-danger me-2"></i>Top 10 Cabang Frekuensi Downtime Terbanyak</h6>
+                        <div style="height: 300px;">
+                            <canvas id="chart-downtime-site"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card p-3 h-100">
+                        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-pie-chart-fill text-primary me-2"></i>Perbandingan Downtime Provider</h6>
+                        <div style="height: 300px;" class="d-flex align-items-center justify-content-center">
+                            <canvas id="chart-downtime-provider"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card p-3">
+                        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-graph-up text-success me-2"></i>Tren Insiden Gangguan Harian</h6>
+                        <div style="height: 250px;">
+                            <canvas id="chart-downtime-trend"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 4: EKSPOR LAPORAN ==================== -->
+        <div id="tab-export" class="tab-content-area d-none">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card p-4 h-100">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="bi bi-file-earmark-excel-fill text-success fs-1 me-3"></i>
+                            <div>
+                                <h5 class="fw-bold mb-1">Laporan Riwayat Downtime</h5>
+                                <p class="text-muted small mb-0">Format multi-sheet Excel (.xlsx) mencakup summary durasi down, detail insiden, dan klaim SLA vendor.</p>
+                            </div>
+                        </div>
+                        <form action="/api/export/downtime" method="GET" class="mt-2">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Dari Tanggal</label>
+                                <input type="date" name="from" class="form-control form-control-sm">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Sampai Tanggal</label>
+                                <input type="date" name="to" class="form-control form-control-sm">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Filter Provider</label>
+                                <select name="provider" class="form-select form-select-sm">
+                                    <option value="">Semua Provider (Lintasarta & ICON)</option>
+                                    <option value="lintasarta">Hanya Lintasarta</option>
+                                    <option value="icon">Hanya ICON</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-success w-100 btn-sm"><i class="bi bi-download me-1"></i> Download Laporan Downtime (.xlsx)</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card p-4 h-100">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="bi bi-speedometer text-primary fs-1 me-3"></i>
+                            <div>
+                                <h5 class="fw-bold mb-1">Laporan Riwayat Latensi</h5>
+                                <p class="text-muted small mb-0">Format Excel (.xlsx) berisi log uji latensi (ms), min, max, dan rata-rata performa link jaringan.</p>
+                            </div>
+                        </div>
+                        <form action="/api/export/latency" method="GET" class="mt-2">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Dari Tanggal</label>
+                                <input type="date" name="from" class="form-control form-control-sm">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Sampai Tanggal</label>
+                                <input type="date" name="to" class="form-control form-control-sm">
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 btn-sm"><i class="bi bi-download me-1"></i> Download Laporan Latensi (.xlsx)</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 5: KONFIGURASI (ADMIN ONLY) ==================== -->
+        {% if role in ['admin', 'super_admin'] %}
+        <div id="tab-settings" class="tab-content-area d-none">
+            <div class="row g-4">
+                <!-- Telegram Config -->
+                <div class="col-lg-6">
+                    <div class="card p-4 h-100">
+                        <h5 class="fw-bold mb-3"><i class="bi bi-telegram text-info me-2"></i>Konfigurasi Telegram Alert</h5>
+                        <form id="form-telegram" onsubmit="saveTelegramConfig(event)">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Bot Token</label>
+                                <input type="text" id="tg-token" class="form-control form-control-sm" placeholder="Contoh: 123456789:ABCdefGhIjk...">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Chat ID Lintasarta</label>
+                                <input type="text" id="tg-chat-lintasarta" class="form-control form-control-sm" placeholder="Grup Telegram Lintasarta">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Chat ID ICON</label>
+                                <input type="text" id="tg-chat-icon" class="form-control form-control-sm" placeholder="Grup Telegram ICON">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Chat ID Gabungan / All</label>
+                                <input type="text" id="tg-chat-all" class="form-control form-control-sm" placeholder="Grup Monitoring Umum">
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i> Simpan Konfigurasi</button>
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="testTelegram('all')"><i class="bi bi-send me-1"></i> Test Kirim Alert</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Data Retention & Purge -->
+                <div class="col-lg-6">
+                    <div class="card p-4 h-100">
+                        <h5 class="fw-bold mb-3 text-danger"><i class="bi bi-trash3-fill me-2"></i>Retensi & Pembersihan Data</h5>
+                        <p class="text-muted small">Bersihkan data riwayat lawas untuk menjaga ukuran database tetap efisien.</p>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Tabel Target</label>
+                            <select id="purge-table" class="form-select form-select-sm">
+                                <option value="downtime">Riwayat Downtime (downtime_history)</option>
+                                <option value="latency">Riwayat Latensi (latency_history)</option>
+                                <option value="runtime">Reset Status Runtime (runtime_states)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Rentang Waktu</label>
+                            <select id="purge-filter-template" class="form-select form-select-sm">
+                                <option value="3months">Data Lebih Dari 3 Bulan Lalu</option>
+                                <option value="monthly">Data Lebih Dari 1 Bulan Lalu</option>
+                                <option value="weekly">Data Lebih Dari 1 Minggu Lalu</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-danger btn-sm" onclick="executePurge()"><i class="bi bi-trash me-1"></i> Bersihkan Data Sekarang</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
-    <!-- WhatsApp Escalation Modal -->
+    <!-- ==================== MODAL: WHATSAPP ESKALASI ==================== -->
     <div class="modal fade" id="modal-whatsapp" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
-                    <h6 class="modal-title fw-bold"><i class="bi bi-whatsapp me-2"></i>Kirim Pesan WhatsApp Gangguan</h6>
+                    <h6 class="modal-title fw-bold"><i class="bi bi-whatsapp me-2"></i>Eskalasi Gangguan via WhatsApp</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" id="wa-router-ip">
+                    <input type="hidden" id="wa-router-id">
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">Penerima</label>
+                        <label class="form-label small fw-bold">Pilih Link yang Bermasalah</label>
+                        <select id="wa-link-choice" class="form-select form-select-sm" onchange="generateWAMessage()">
+                            <option value="both">Kedua Link Down (Total Outage / Mati Lampu)</option>
+                            <option value="lintasarta">Hanya Link 1 (Lintasarta / Versa)</option>
+                            <option value="icon">Hanya Link 2 (ICON / Starlink)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Penerima Pesan</label>
                         <select id="wa-target-type" class="form-select form-select-sm" onchange="generateWAMessage()">
                             <option value="pic">PIC Cabang Bank Kalsel</option>
                             <option value="provider">Helpdesk / NOC Provider</option>
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">Nomor Telepon</label>
+                        <label class="form-label small fw-bold">Nomor WhatsApp Tujuan</label>
                         <input type="text" id="wa-phone" class="form-control form-control-sm" readonly>
                     </div>
                     <div class="mb-3">
@@ -380,74 +388,71 @@
         </div>
     </div>
 
-    <!-- Add/Edit Router Modal -->
+    <!-- ==================== MODAL: TAMBAH / EDIT ROUTER SD-WAN ==================== -->
     <div class="modal fade" id="modal-router" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h6 class="modal-title fw-bold" id="modal-router-title">Tambah Data Router SD-WAN</h6>
+                    <h6 class="modal-title fw-bold" id="modal-router-title">Tambah Data Router SD-WAN Cabang</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <form id="form-router" onsubmit="saveRouter(event)">
                         <input type="hidden" id="router-is-edit" value="0">
-                        <input type="hidden" id="router-original-ip" value="">
+                        <input type="hidden" id="router-edit-id" value="">
                         <div class="row g-2">
                             <div class="col-md-6 mb-2">
-                                <label class="form-label small fw-bold">Site / Cabang *</label>
-                                <input type="text" id="router-site" class="form-control form-control-sm" required>
+                                <label class="form-label small fw-bold">Nama Site / Cabang *</label>
+                                <input type="text" id="router-site" class="form-control form-control-sm" placeholder="Contoh: KC BANJARMASIN" required>
                             </div>
                             <div class="col-md-6 mb-2">
-                                <label class="form-label small fw-bold">Nama Router *</label>
-                                <input type="text" id="router-name" class="form-control form-control-sm" required>
+                                <label class="form-label small fw-bold">Nama Perangkat Router</label>
+                                <input type="text" id="router-name" class="form-control form-control-sm" placeholder="router-banjarmasin-sdwan">
                             </div>
                             <div class="col-md-6 mb-2">
-                                <label class="form-label small fw-bold">IP Address *</label>
-                                <input type="text" id="router-ip" class="form-control form-control-sm" required>
+                                <label class="form-label small fw-bold text-primary"><i class="bi bi-link-45deg"></i> IP Link 1: Lintasarta (Versa)</label>
+                                <input type="text" id="router-ip-lintas" class="form-control form-control-sm" placeholder="Contoh: 10.10.1.1">
                             </div>
                             <div class="col-md-6 mb-2">
-                                <label class="form-label small fw-bold">Provider *</label>
-                                <select id="router-provider" class="form-select form-select-sm" required>
-                                    <option value="lintasarta">Lintasarta</option>
-                                    <option value="icon">ICON</option>
-                                </select>
+                                <label class="form-label small fw-bold text-warning"><i class="bi bi-link-45deg"></i> IP Link 2: ICON (Starlink)</label>
+                                <input type="text" id="router-ip-icon" class="form-control form-control-sm" placeholder="Contoh: 172.16.1.1">
                             </div>
                             <div class="col-md-4 mb-2">
-                                <label class="form-label small fw-bold">Media Akses</label>
-                                <input type="text" id="router-access" class="form-control form-control-sm" placeholder="Versa / Starlink">
+                                <label class="form-label small fw-bold">Akses & Model</label>
+                                <input type="text" id="router-access" class="form-control form-control-sm" placeholder="Versa SD-WAN / Starlink">
                             </div>
                             <div class="col-md-4 mb-2">
                                 <label class="form-label small fw-bold">Nojar Versa</label>
-                                <input type="text" id="router-nojar-versa" class="form-control form-control-sm">
+                                <input type="text" id="router-nojar-versa" class="form-control form-control-sm" placeholder="No. Jaringan Versa">
                             </div>
                             <div class="col-md-4 mb-2">
                                 <label class="form-label small fw-bold">Nojar Starlink</label>
-                                <input type="text" id="router-nojar-starlink" class="form-control form-control-sm">
+                                <input type="text" id="router-nojar-starlink" class="form-control form-control-sm" placeholder="No. Jaringan Starlink">
                             </div>
                             <div class="col-md-6 mb-2">
-                                <label class="form-label small fw-bold">Latitude</label>
-                                <input type="number" step="any" id="router-lat" class="form-control form-control-sm">
+                                <label class="form-label small fw-bold">Latitude (Garis Lintang)</label>
+                                <input type="number" step="any" id="router-lat" class="form-control form-control-sm" placeholder="-3.316694">
                             </div>
                             <div class="col-md-6 mb-2">
-                                <label class="form-label small fw-bold">Longitude</label>
-                                <input type="number" step="any" id="router-lon" class="form-control form-control-sm">
+                                <label class="form-label small fw-bold">Longitude (Garis Bujur)</label>
+                                <input type="number" step="any" id="router-lon" class="form-control form-control-sm" placeholder="114.590111">
                             </div>
                             <div class="col-md-4 mb-2">
-                                <label class="form-label small fw-bold">Nama PIC</label>
-                                <input type="text" id="router-pic-name" class="form-control form-control-sm">
+                                <label class="form-label small fw-bold">Nama PIC Cabang</label>
+                                <input type="text" id="router-pic-name" class="form-control form-control-sm" placeholder="Nama Penanggung Jawab">
                             </div>
                             <div class="col-md-4 mb-2">
-                                <label class="form-label small fw-bold">No WA PIC</label>
-                                <input type="text" id="router-pic-phone" class="form-control form-control-sm">
+                                <label class="form-label small fw-bold">No WA PIC Cabang</label>
+                                <input type="text" id="router-pic-phone" class="form-control form-control-sm" placeholder="08xxxxxxxxxx">
                             </div>
                             <div class="col-md-4 mb-2">
                                 <label class="form-label small fw-bold">No WA NOC Provider</label>
-                                <input type="text" id="router-pic-provider-phone" class="form-control form-control-sm">
+                                <input type="text" id="router-pic-provider-phone" class="form-control form-control-sm" placeholder="08xxxxxxxxxx">
                             </div>
                         </div>
                         <div class="modal-footer px-0 pb-0 mt-3">
                             <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
-                            <button type="submit" class="btn btn-primary btn-sm">Simpan Router</button>
+                            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i> Simpan Router SD-WAN</button>
                         </div>
                     </form>
                 </div>
@@ -455,16 +460,16 @@
         </div>
     </div>
 
-    <!-- Excel Bulk Import Modal -->
+    <!-- ==================== MODAL: EXCEL BULK IMPORT ==================== -->
     <div class="modal fade" id="modal-import" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
-                    <h6 class="modal-title fw-bold"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Bulk Upload Excel Cabang</h6>
+                    <h6 class="modal-title fw-bold"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Upload File Excel Cabang SD-WAN</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="small text-muted">Upload file Excel (.xlsx / .xls) berisi data cabang. Sistem akan otomatis memetakan kolom dan memisahkan IP Lintasarta & IP ICON.</p>
+                    <p class="small text-muted">Upload file spreadsheet Excel (.xlsx / .xls). Sistem akan otomatis membaca kolom <strong>IP Lintas</strong> dan <strong>IP ICON</strong> untuk setiap kantor cabang.</p>
                     <form id="form-import" onsubmit="uploadExcel(event)">
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Pilih File Excel</label>
@@ -481,9 +486,9 @@
         </div>
     </div>
 
-    <div class="watermark">PT. Bank Kalsel - SD-WAN Monitoring</div>
+    <div class="watermark">PT. Bank Kalsel - Enterprise SD-WAN</div>
 
-    <!-- Bootstrap 5 & Chart.js & Leaflet JS -->
+    <!-- Bootstrap 5, Chart.js, Leaflet JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -495,16 +500,39 @@
         let chartSite = null;
         let chartProvider = null;
         let chartTrend = null;
+        let currentWaUrl = '';
+
+        // --- RELIABLE TAB SWITCHER ---
+        function switchTab(tabId) {
+            // Hide all tab areas
+            document.querySelectorAll('.tab-content-area').forEach(el => el.classList.add('d-none'));
+            // Remove active from all nav buttons
+            document.querySelectorAll('.nav-link-tab').forEach(el => el.classList.remove('active'));
+
+            // Show selected tab
+            const target = document.getElementById(tabId);
+            if (target) target.classList.remove('d-none');
+
+            // Set active class on navbar button
+            const btn = document.getElementById('btn-' + tabId);
+            if (btn) btn.classList.add('active');
+
+            // Trigger tab-specific initializations
+            if (tabId === 'tab-map') {
+                setTimeout(initOrInvalidateMap, 100);
+            } else if (tabId === 'tab-stats') {
+                setTimeout(loadCharts, 100);
+            }
+        }
 
         document.addEventListener('DOMContentLoaded', function() {
             loadRouters();
-            initLeafletMap();
             loadTelegramConfig();
             // Polling interval every 30 seconds
             setInterval(loadRouters, 30000);
         });
 
-        // --- Router Management & Table ---
+        // --- LOAD ROUTERS & RENDER TABLE ---
         function loadRouters() {
             fetch('/api/routers')
                 .then(res => res.json())
@@ -513,7 +541,7 @@
                         allRouters = data;
                         updateStats(data);
                         renderRoutersTable(data);
-                        updateMapMarkers(data);
+                        if (leafletMap) updateMapMarkers(data);
                     }
                 })
                 .catch(err => console.error('Error fetching routers:', err));
@@ -521,50 +549,89 @@
 
         function updateStats(routers) {
             document.getElementById('stat-total').textContent = routers.length;
-            const onlineCount = routers.filter(r => r.status === 'up').length;
+            const dualUpCount = routers.filter(r => r.status === 'dual_up' || r.status === 'up').length;
+            const partialCount = routers.filter(r => r.status === 'partial').length;
             const downCount = routers.filter(r => r.status === 'down').length;
-            const latencyCount = routers.filter(r => r.high_latency_active).length;
 
-            document.getElementById('stat-online').textContent = onlineCount;
+            document.getElementById('stat-online').textContent = dualUpCount;
+            document.getElementById('stat-partial').textContent = partialCount;
             document.getElementById('stat-down').textContent = downCount;
-            document.getElementById('stat-latency').textContent = latencyCount;
         }
 
         function renderRoutersTable(routers) {
             const tbody = document.getElementById('routers-tbody');
             if (!routers.length) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">Belum ada data router. Silakan upload file Excel atau tambah manual.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Belum ada data router SD-WAN. Silakan upload Excel atau klik "Tambah Router".</td></tr>';
                 return;
             }
 
             let html = '';
             routers.forEach(r => {
-                const statusClass = r.status === 'up' ? 'badge-status-up' : (r.status === 'down' ? 'badge-status-down' : 'badge-status-unknown');
-                const providerClass = (r.provider || '').toLowerCase() === 'lintasarta' ? 'badge-provider-lintasarta' : 'badge-provider-icon';
+                // Composite status badge
+                let statusBadge = '';
+                if (r.status === 'dual_up') {
+                    statusBadge = '<span class="badge badge-dual-up"><i class="bi bi-check2-all me-1"></i>DUAL ONLINE</span>';
+                } else if (r.status === 'partial') {
+                    statusBadge = '<span class="badge badge-partial"><i class="bi bi-exclamation-triangle-fill me-1"></i>1 LINK DOWN</span>';
+                } else if (r.status === 'down') {
+                    statusBadge = '<span class="badge badge-down"><i class="bi bi-x-circle-fill me-1"></i>TOTAL DOWN</span>';
+                } else if (r.status === 'up') {
+                    statusBadge = '<span class="badge badge-dual-up">ONLINE</span>';
+                } else {
+                    statusBadge = '<span class="badge badge-unknown">UNKNOWN</span>';
+                }
+
+                // Link 1: Lintasarta
+                let link1Html = '<span class="text-muted small">Tidak diset</span>';
+                if (r.ip_lintas) {
+                    const s1Class = r.status_lintas === 'up' ? 'text-success' : (r.status_lintas === 'down' ? 'text-danger fw-bold' : 'text-muted');
+                    link1Html = `
+                        <div>
+                            <code>${r.ip_lintas}</code> 
+                            <span class="badge badge-provider-lintasarta p-1 px-2" style="font-size:10px;">Lintasarta</span>
+                            <div class="small ${s1Class}"><i class="bi bi-circle-fill" style="font-size:8px;"></i> ${r.status_lintas ? r.status_lintas.toUpperCase() : 'UNKNOWN'}</div>
+                        </div>
+                    `;
+                }
+
+                // Link 2: ICON
+                let link2Html = '<span class="text-muted small">Tidak diset</span>';
+                if (r.ip_icon) {
+                    const s2Class = r.status_icon === 'up' ? 'text-success' : (r.status_icon === 'down' ? 'text-danger fw-bold' : 'text-muted');
+                    link2Html = `
+                        <div>
+                            <code>${r.ip_icon}</code> 
+                            <span class="badge badge-provider-icon p-1 px-2" style="font-size:10px;">ICON</span>
+                            <div class="small ${s2Class}"><i class="bi bi-circle-fill" style="font-size:8px;"></i> ${r.status_icon ? r.status_icon.toUpperCase() : 'UNKNOWN'}</div>
+                        </div>
+                    `;
+                }
+
                 const nojar = (r.nojar_cpe_versa || '-') + ' / ' + (r.nojar_starlink || '-');
-                
+
                 html += `
                     <tr>
-                        <td><span class="badge ${statusClass} text-uppercase">${r.status || 'UNKNOWN'}</span></td>
-                        <td class="fw-bold">${r.site || '-'}</td>
-                        <td><small>${r.name || '-'}</small></td>
-                        <td><code>${r.ip}</code></td>
-                        <td><span class="badge ${providerClass} text-uppercase">${r.provider || '-'}</span></td>
-                        <td><small>${r.access_type || 'SD-WAN'}</small></td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <strong class="text-dark">${r.site || '-'}</strong>
+                            <div class="text-muted" style="font-size: 11px;">${r.name || '-'}</div>
+                        </td>
+                        <td>${link1Html}</td>
+                        <td>${link2Html}</td>
                         <td><small class="text-muted">${nojar}</small></td>
                         <td>
-                            <small class="fw-semibold">${r.pic_name || '-'}</small><br>
+                            <small class="fw-semibold text-dark">${r.pic_name || '-'}</small><br>
                             <small class="text-muted">${r.pic_phone || '-'}</small>
                         </td>
                         <td class="text-center">
-                            <button class="btn btn-outline-success btn-sm p-1" title="Kirim WhatsApp" onclick="openWhatsAppModal('${r.ip}')">
+                            <button class="btn btn-outline-success btn-sm p-1 px-2" title="Kirim WhatsApp" onclick="openWhatsAppModal(${r.id})">
                                 <i class="bi bi-whatsapp"></i>
                             </button>
                             {% if role in ['admin', 'super_admin'] %}
-                            <button class="btn btn-outline-primary btn-sm p-1" title="Edit" onclick="editRouter('${r.ip}')">
+                            <button class="btn btn-outline-primary btn-sm p-1 px-2" title="Edit" onclick="editRouter(${r.id})">
                                 <i class="bi bi-pencil-square"></i>
                             </button>
-                            <button class="btn btn-outline-danger btn-sm p-1" title="Hapus" onclick="deleteRouter('${r.ip}')">
+                            <button class="btn btn-outline-danger btn-sm p-1 px-2" title="Hapus" onclick="deleteRouter(${r.id}, '${r.site}')">
                                 <i class="bi bi-trash"></i>
                             </button>
                             {% endif %}
@@ -577,36 +644,34 @@
 
         function filterRouters() {
             const search = document.getElementById('search-input').value.toLowerCase();
-            const provider = document.getElementById('filter-provider').value.toLowerCase();
             const status = document.getElementById('filter-status').value.toLowerCase();
 
             const filtered = allRouters.filter(r => {
                 const matchSearch = (r.site || '').toLowerCase().includes(search) ||
-                                    (r.ip || '').toLowerCase().includes(search) ||
-                                    (r.name || '').toLowerCase().includes(search) ||
+                                    (r.ip_lintas || '').toLowerCase().includes(search) ||
+                                    (r.ip_icon || '').toLowerCase().includes(search) ||
                                     (r.pic_name || '').toLowerCase().includes(search);
-                const matchProvider = !provider || (r.provider || '').toLowerCase() === provider;
                 const matchStatus = !status || (r.status || '').toLowerCase() === status;
-                return matchSearch && matchProvider && matchStatus;
+                return matchSearch && matchStatus;
             });
 
             renderRoutersTable(filtered);
         }
 
-        // --- Leaflet Map ---
-        function initLeafletMap() {
-            // Center around South Kalimantan (Banjarmasin ~ -3.316694, 114.590111)
-            leafletMap = L.map('map').setView([-3.316694, 114.590111], 8);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 18,
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(leafletMap);
-        }
-
-        function invalidateMap() {
+        // --- LEAFLET MAP ---
+        function initOrInvalidateMap() {
+            if (!leafletMap) {
+                // Center around South Kalimantan (Banjarmasin ~ -3.316694, 114.590111)
+                leafletMap = L.map('map').setView([-3.316694, 114.590111], 8);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 18,
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(leafletMap);
+                updateMapMarkers(allRouters);
+            }
             setTimeout(() => {
                 if (leafletMap) leafletMap.invalidateSize();
-            }, 200);
+            }, 150);
         }
 
         function updateMapMarkers(routers) {
@@ -616,53 +681,61 @@
 
             routers.forEach(r => {
                 if (r.latitude && r.longitude) {
-                    const color = r.status === 'up' ? '#198754' : '#dc3545';
+                    let color = '#198754'; // Hijau (dual up)
+                    if (r.status === 'partial') color = '#ffc107'; // Kuning (1 link down)
+                    if (r.status === 'down') color = '#dc3545'; // Merah (total down)
+
                     const marker = L.circleMarker([r.latitude, r.longitude], {
-                        radius: 8,
+                        radius: 9,
                         fillColor: color,
                         color: '#ffffff',
                         weight: 2,
                         opacity: 1,
-                        fillOpacity: 0.8
+                        fillOpacity: 0.85
                     }).addTo(leafletMap);
 
                     marker.bindPopup(`
                         <strong>${r.site}</strong><br>
-                        IP: <code>${r.ip}</code><br>
-                        Provider: <b>${(r.provider || '').toUpperCase()}</b><br>
+                        Link Lintasarta: <code>${r.ip_lintas || '-'}</code> (${(r.status_lintas || 'unknown').toUpperCase()})<br>
+                        Link ICON: <code>${r.ip_icon || '-'}</code> (${(r.status_icon || 'unknown').toUpperCase()})<br>
                         Status: <b style="color:${color}">${(r.status || 'UNKNOWN').toUpperCase()}</b><br>
                         PIC: ${r.pic_name || '-'} (${r.pic_phone || '-'})<br>
-                        <a href="https://www.google.com/maps?q=${r.latitude},${r.longitude}" target="_blank" class="btn btn-sm btn-outline-primary mt-1 p-0 px-2" style="font-size:11px;">Buka Google Maps</a>
+                        <a href="https://www.google.com/maps?q=${r.latitude},${r.longitude}" target="_blank" class="btn btn-sm btn-outline-primary mt-2 p-0 px-2" style="font-size:11px;">Buka Google Maps</a>
                     `);
                     mapMarkers.push(marker);
                 }
             });
         }
 
-        // --- Charts & Analytics ---
+        // --- CHARTS & STATS ---
         function loadCharts() {
             fetch('/api/stats/downtime-by-site')
                 .then(r => r.json())
-                .then(data => renderSiteChart(data));
+                .then(data => renderSiteChart(data))
+                .catch(e => console.error(e));
 
             fetch('/api/stats/downtime-by-provider')
                 .then(r => r.json())
-                .then(data => renderProviderChart(data));
+                .then(data => renderProviderChart(data))
+                .catch(e => console.error(e));
 
             fetch('/api/stats/downtime-trend')
                 .then(r => r.json())
-                .then(data => renderTrendChart(data));
+                .then(data => renderTrendChart(data))
+                .catch(e => console.error(e));
         }
 
         function renderSiteChart(data) {
-            const ctx = document.getElementById('chart-downtime-site').getContext('2d');
+            const canvas = document.getElementById('chart-downtime-site');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
             if (chartSite) chartSite.destroy();
             chartSite = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: data.map(d => d.site),
                     datasets: [{
-                        label: 'Frekuensi Gangguan',
+                        label: 'Frekuensi Gangguan Link',
                         data: data.map(d => d.count),
                         backgroundColor: '#dc3545'
                     }]
@@ -672,7 +745,9 @@
         }
 
         function renderProviderChart(data) {
-            const ctx = document.getElementById('chart-downtime-provider').getContext('2d');
+            const canvas = document.getElementById('chart-downtime-provider');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
             if (chartProvider) chartProvider.destroy();
             chartProvider = new Chart(ctx, {
                 type: 'doughnut',
@@ -688,7 +763,9 @@
         }
 
         function renderTrendChart(data) {
-            const ctx = document.getElementById('chart-downtime-trend').getContext('2d');
+            const canvas = document.getElementById('chart-downtime-trend');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
             if (chartTrend) chartTrend.destroy();
             chartTrend = new Chart(ctx, {
                 type: 'line',
@@ -707,58 +784,61 @@
             });
         }
 
-        // --- WhatsApp Modal & Quick Message ---
-        let currentWaUrl = '';
-        function openWhatsAppModal(ip) {
-            document.getElementById('wa-router-ip').value = ip;
+        // --- WHATSAPP MODAL ---
+        function openWhatsAppModal(routerId) {
+            document.getElementById('wa-router-id').value = routerId;
             generateWAMessage();
             new bootstrap.Modal(document.getElementById('modal-whatsapp')).show();
         }
 
         function generateWAMessage() {
-            const ip = document.getElementById('wa-router-ip').value;
+            const routerId = document.getElementById('wa-router-id').value;
             const targetType = document.getElementById('wa-target-type').value;
+            const linkChoice = document.getElementById('wa-link-choice').value;
 
             fetch('/api/whatsapp/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip: ip, template_type: targetType })
+                body: JSON.stringify({ router_id: routerId, template_type: targetType, link_choice: linkChoice })
             })
             .then(res => res.json())
             .then(data => {
                 document.getElementById('wa-phone').value = data.phone || '-';
                 document.getElementById('wa-message-text').value = data.message || '';
                 currentWaUrl = data.url || '';
-            });
+            })
+            .catch(err => console.error(err));
         }
 
         function openWhatsApp() {
             if (currentWaUrl) {
                 window.open(currentWaUrl, '_blank');
             } else {
-                alert('Nomor telepon tidak valid atau kosong.');
+                alert('Nomor telepon WhatsApp kosong atau belum terisi.');
             }
         }
 
-        // --- Add / Edit Router ---
+        // --- TAMBAH / EDIT ROUTER SD-WAN (DUAL IP) ---
         function showAddRouterModal() {
             document.getElementById('form-router').reset();
             document.getElementById('router-is-edit').value = "0";
-            document.getElementById('modal-router-title').textContent = "Tambah Data Router SD-WAN";
+            document.getElementById('router-edit-id').value = "";
+            document.getElementById('modal-router-title').textContent = "Tambah Router SD-WAN Cabang";
             new bootstrap.Modal(document.getElementById('modal-router')).show();
         }
 
-        function editRouter(ip) {
-            const router = allRouters.find(r => r.ip === ip);
+        function editRouter(routerId) {
+            const router = allRouters.find(r => r.id === routerId);
             if (!router) return;
+
             document.getElementById('router-is-edit').value = "1";
-            document.getElementById('router-original-ip').value = ip;
-            document.getElementById('modal-router-title').textContent = "Edit Data Router (" + ip + ")";
+            document.getElementById('router-edit-id').value = router.id;
+            document.getElementById('modal-router-title').textContent = `Edit Router SD-WAN (${router.site})`;
 
             document.getElementById('router-site').value = router.site || '';
             document.getElementById('router-name').value = router.name || '';
-            document.getElementById('router-ip').value = router.ip || '';
-            document.getElementById('router-provider').value = (router.provider || 'lintasarta').toLowerCase();
+            document.getElementById('router-ip-lintas').value = router.ip_lintas || '';
+            document.getElementById('router-ip-icon').value = router.ip_icon || '';
             document.getElementById('router-access').value = router.access_type || '';
             document.getElementById('router-nojar-versa').value = router.nojar_cpe_versa || '';
             document.getElementById('router-nojar-starlink').value = router.nojar_starlink || '';
@@ -774,13 +854,13 @@
         function saveRouter(e) {
             e.preventDefault();
             const isEdit = document.getElementById('router-is-edit').value === "1";
-            const originalIp = document.getElementById('router-original-ip').value;
+            const routerId = document.getElementById('router-edit-id').value;
 
             const payload = {
                 site: document.getElementById('router-site').value,
                 name: document.getElementById('router-name').value,
-                ip: document.getElementById('router-ip').value,
-                provider: document.getElementById('router-provider').value,
+                ip_lintas: document.getElementById('router-ip-lintas').value,
+                ip_icon: document.getElementById('router-ip-icon').value,
                 access_type: document.getElementById('router-access').value,
                 nojar_cpe_versa: document.getElementById('router-nojar-versa').value,
                 nojar_starlink: document.getElementById('router-nojar-starlink').value,
@@ -791,7 +871,7 @@
                 pic_provider_phone: document.getElementById('router-pic-provider-phone').value
             };
 
-            const url = isEdit ? `/api/routers/${originalIp}` : '/api/routers';
+            const url = isEdit ? `/api/routers/${routerId}` : '/api/routers';
             const method = isEdit ? 'PUT' : 'POST';
 
             fetch(url, {
@@ -802,17 +882,18 @@
             .then(res => res.json())
             .then(data => {
                 if (data.error) {
-                    alert('Gagal menyimpan router: ' + data.error);
+                    alert('Gagal: ' + data.error);
                 } else {
                     bootstrap.Modal.getInstance(document.getElementById('modal-router')).hide();
                     loadRouters();
                 }
-            });
+            })
+            .catch(err => alert('Gagal menghubungi server: ' + err));
         }
 
-        function deleteRouter(ip) {
-            if (!confirm(`Yakin ingin menghapus router dengan IP ${ip}?`)) return;
-            fetch(`/api/routers/${ip}`, { method: 'DELETE' })
+        function deleteRouter(routerId, siteName) {
+            if (!confirm(`Konfirmasi: Hapus data router cabang ${siteName}?`)) return;
+            fetch(`/api/routers/${routerId}`, { method: 'DELETE' })
                 .then(res => res.json())
                 .then(data => {
                     if (data.error) alert(data.error);
@@ -820,7 +901,7 @@
                 });
         }
 
-        // --- Bulk Excel Import ---
+        // --- BULK EXCEL UPLOAD ---
         function showImportModal() {
             document.getElementById('form-import').reset();
             document.getElementById('import-result').classList.add('d-none');
@@ -837,7 +918,7 @@
 
             const resDiv = document.getElementById('import-result');
             resDiv.className = 'alert alert-info small';
-            resDiv.textContent = 'Mengunggah dan memproses file Excel...';
+            resDiv.textContent = 'Mengunggah dan memproses data Excel cabang SD-WAN...';
             resDiv.classList.remove('d-none');
 
             fetch('/api/upload/branches', {
@@ -848,20 +929,20 @@
             .then(data => {
                 if (data.success) {
                     resDiv.className = 'alert alert-success small';
-                    resDiv.textContent = `Sukses! Diimport: ${data.results.inserted}, Diupdate: ${data.results.updated}, Total: ${data.results.total_routers}`;
+                    resDiv.textContent = `Sukses! Diimport: ${data.results.inserted}, Diupdate: ${data.results.updated}, Total: ${data.results.total_branches} cabang.`;
                     loadRouters();
                 } else {
                     resDiv.className = 'alert alert-danger small';
-                    resDiv.textContent = 'Gagal import: ' + (data.error || 'Terjadi kesalahan');
+                    resDiv.textContent = 'Gagal import: ' + (data.error || 'Periksa format file Excel.');
                 }
             })
             .catch(err => {
                 resDiv.className = 'alert alert-danger small';
-                resDiv.textContent = 'Gagal menghubungi server: ' + err;
+                resDiv.textContent = 'Gagal upload: ' + err;
             });
         }
 
-        // --- Telegram Settings ---
+        // --- TELEGRAM CONFIG ---
         function loadTelegramConfig() {
             fetch('/api/telegram/config')
                 .then(res => res.json())
@@ -872,7 +953,8 @@
                         document.getElementById('tg-chat-icon').value = data.chat_id_icon || '';
                         document.getElementById('tg-chat-all').value = data.chat_id_all || '';
                     }
-                });
+                })
+                .catch(e => console.error(e));
         }
 
         function saveTelegramConfig(e) {
@@ -900,16 +982,16 @@
             })
             .then(res => res.json())
             .then(data => {
-                if (data.success) alert('Test pesan berhasil terkirim ke Telegram!');
-                else alert('Test gagal: ' + (data.error || 'Periksa Bot Token dan Chat ID.'));
+                if (data.success) alert('Test pesan Telegram berhasil terkirim!');
+                else alert('Test gagal: ' + (data.error || 'Periksa Bot Token & Chat ID Telegram.'));
             });
         }
 
-        // --- Data Retention Purge ---
+        // --- DATA RETENTION ---
         function executePurge() {
             const table = document.getElementById('purge-table').value;
             const template = document.getElementById('purge-filter-template').value;
-            if (!confirm(`Konfirmasi: Bersihkan data pada tabel ${table}?`)) return;
+            if (!confirm(`Konfirmasi: Bersihkan data lawas pada tabel ${table}?`)) return;
 
             fetch(`/api/delete/${table}`, {
                 method: 'DELETE',

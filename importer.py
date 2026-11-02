@@ -52,7 +52,7 @@ class BranchImporter:
 
     def import_branches_from_excel(self, filepath):
         if not os.path.exists(filepath):
-            return {"success": False, "error": f"File not found: {filepath}"}
+            return {"success": False, "error": f"File tidak ditemukan: {filepath}"}
 
         try:
             df = pd.read_excel(filepath, dtype=str)
@@ -61,7 +61,7 @@ class BranchImporter:
             required_check = ['site']
             missing = [col for col in required_check if col not in df.columns]
             if missing:
-                return {"success": False, "error": f"Missing required column: {missing}"}
+                return {"success": False, "error": f"Kolom wajib tidak ditemukan: {missing}"}
 
             routers_to_import = self._prepare_routers(df)
             import_result = self._import_to_database(routers_to_import)
@@ -102,7 +102,10 @@ class BranchImporter:
         return str(text).replace('/', '_').replace(' ', '_').replace('-', '_').lower()
 
     def _prepare_routers(self, df):
-        """Extract individual router items (1 or 2 per branch row for dual provider)."""
+        """
+        Extract SD-WAN router item for each branch.
+        Each router contains BOTH ip_lintas and ip_icon (Dual Link SD-WAN).
+        """
         router_list = []
         for _, row in df.iterrows():
             site = self._cell(row, 'site')
@@ -111,7 +114,7 @@ class BranchImporter:
 
             ip_lintas = self._cell(row, 'ip_lintas')
             ip_icon = self._cell(row, 'ip_icon')
-            access_type = self._cell(row, 'access_type') or 'SD-WAN'
+            access_type = self._cell(row, 'access_type') or 'Versa SD-WAN'
             nojar_versa = self._cell(row, 'nojar_versa')
             nojar_starlink = self._cell(row, 'nojar_starlink')
 
@@ -136,49 +139,39 @@ class BranchImporter:
 
             site_slug = self._slugify(site)
 
-            # 1. Lintasarta Router
-            if ip_lintas:
-                router_list.append({
-                    'site': site,
-                    'name': f"router-{site_slug}-lintasarta",
-                    'ip': ip_lintas,
-                    'provider': 'lintasarta',
-                    'access_type': access_type,
-                    'nojar_cpe_versa': nojar_versa,
-                    'nojar_starlink': nojar_starlink,
-                    'latitude': lat,
-                    'longitude': lon,
-                    'timezone': timezone,
-                    'router_versa_name': router_versa_name,
-                    'router_model': router_model,
-                    'router_versa_regist': router_versa_regist,
-                    'psu_regist': psu_regist,
-                    'pic_name': pic_name,
-                    'pic_phone': pic_phone,
-                    'pic_provider_phone': pic_provider_phone
-                })
+            # Determine provider tag
+            if ip_lintas and ip_icon:
+                provider_tag = 'dual'
+            elif ip_lintas:
+                provider_tag = 'lintasarta'
+            elif ip_icon:
+                provider_tag = 'icon'
+            else:
+                provider_tag = 'sdwan'
 
-            # 2. ICON / Starlink Router
-            if ip_icon:
-                router_list.append({
-                    'site': site,
-                    'name': f"router-{site_slug}-icon",
-                    'ip': ip_icon,
-                    'provider': 'icon',
-                    'access_type': access_type,
-                    'nojar_cpe_versa': nojar_versa,
-                    'nojar_starlink': nojar_starlink,
-                    'latitude': lat,
-                    'longitude': lon,
-                    'timezone': timezone,
-                    'router_versa_name': router_versa_name,
-                    'router_model': router_model,
-                    'router_versa_regist': router_versa_regist,
-                    'psu_regist': psu_regist,
-                    'pic_name': pic_name,
-                    'pic_phone': pic_phone,
-                    'pic_provider_phone': pic_provider_phone
-                })
+            primary_ip = ip_lintas or ip_icon or ''
+
+            router_list.append({
+                'site': site,
+                'name': f"router-{site_slug}-sdwan",
+                'ip': primary_ip,
+                'ip_lintas': ip_lintas,
+                'ip_icon': ip_icon,
+                'provider': provider_tag,
+                'access_type': access_type,
+                'nojar_cpe_versa': nojar_versa,
+                'nojar_starlink': nojar_starlink,
+                'latitude': lat,
+                'longitude': lon,
+                'timezone': timezone,
+                'router_versa_name': router_versa_name,
+                'router_model': router_model,
+                'router_versa_regist': router_versa_regist,
+                'psu_regist': psu_regist,
+                'pic_name': pic_name,
+                'pic_phone': pic_phone,
+                'pic_provider_phone': pic_provider_phone
+            })
 
         return router_list
 
@@ -195,36 +188,38 @@ class BranchImporter:
 
         for r in routers:
             existing = conn.execute(
-                'SELECT id FROM routers WHERE (name = ? AND ip = ? AND provider = ?)',
-                (r['name'], r['ip'], r['provider'])
+                'SELECT id FROM routers WHERE site = ?',
+                (r['site'],)
             ).fetchone()
 
             if existing:
                 conn.execute('''
                     UPDATE routers
-                    SET site = ?, access_type = ?, nojar_cpe_versa = ?, nojar_starlink = ?,
+                    SET name = ?, ip = ?, ip_lintas = ?, ip_icon = ?, provider = ?,
+                        access_type = ?, nojar_cpe_versa = ?, nojar_starlink = ?,
                         latitude = ?, longitude = ?, timezone = ?,
                         router_versa_name = ?, router_model = ?, router_versa_regist = ?, psu_regist = ?,
                         pic_name = ?, pic_phone = ?, pic_provider_phone = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE name = ? AND ip = ? AND provider = ?
+                    WHERE id = ?
                 ''', (
-                    r['site'], r['access_type'], r['nojar_cpe_versa'], r['nojar_starlink'],
+                    r['name'], r['ip'], r['ip_lintas'], r['ip_icon'], r['provider'],
+                    r['access_type'], r['nojar_cpe_versa'], r['nojar_starlink'],
                     r['latitude'], r['longitude'], r['timezone'],
                     r['router_versa_name'], r['router_model'], r['router_versa_regist'], r['psu_regist'],
                     r['pic_name'], r['pic_phone'], r['pic_provider_phone'],
-                    r['name'], r['ip'], r['provider']
+                    existing['id']
                 ))
                 updated_count += 1
             else:
                 conn.execute('''
                     INSERT INTO routers
-                    (site, name, ip, provider, access_type,
+                    (site, name, ip, ip_lintas, ip_icon, provider, access_type,
                      nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
                      router_versa_name, router_model, router_versa_regist, psu_regist,
                      pic_name, pic_phone, pic_provider_phone)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    r['site'], r['name'], r['ip'], r['provider'], r['access_type'],
+                    r['site'], r['name'], r['ip'], r['ip_lintas'], r['ip_icon'], r['provider'], r['access_type'],
                     r['nojar_cpe_versa'], r['nojar_starlink'], r['latitude'], r['longitude'], r['timezone'],
                     r['router_versa_name'], r['router_model'], r['router_versa_regist'], r['psu_regist'],
                     r['pic_name'], r['pic_phone'], r['pic_provider_phone']
@@ -237,7 +232,7 @@ class BranchImporter:
         return {
             "inserted": inserted_count,
             "updated": updated_count,
-            "total_routers": len(routers)
+            "total_branches": len(routers)
         }
 
 def main():

@@ -28,7 +28,6 @@ class DatabaseManager:
     def init_db(self):
         try:
             conn = self.get_connection()
-            # Enable WAL mode for better concurrency in multi-process/threaded environments
             try:
                 conn.execute('PRAGMA journal_mode=WAL;')
             except Exception:
@@ -44,14 +43,18 @@ class DatabaseManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
+            # Routers table: supports dual IP per router (ip_lintas and ip_icon)
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS routers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     site TEXT NOT NULL,
                     name TEXT NOT NULL,
-                    ip TEXT NOT NULL,
-                    provider TEXT NOT NULL,
-                    access_type TEXT NOT NULL,
+                    ip TEXT,
+                    ip_lintas TEXT,
+                    ip_icon TEXT,
+                    provider TEXT DEFAULT 'dual',
+                    access_type TEXT NOT NULL DEFAULT 'SD-WAN',
                     nojar_cpe_versa TEXT,
                     nojar_starlink TEXT,
                     latitude REAL,
@@ -65,10 +68,10 @@ class DatabaseManager:
                     pic_phone TEXT,
                     pic_provider_phone TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(name, ip, provider)
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS downtime_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,6 +86,7 @@ class DatabaseManager:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS latency_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,6 +98,7 @@ class DatabaseManager:
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS runtime_states (
                     ip TEXT PRIMARY KEY,
@@ -108,6 +113,7 @@ class DatabaseManager:
                     UNIQUE(ip)
                 )
             ''')
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
@@ -116,6 +122,7 @@ class DatabaseManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS audit_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,6 +137,7 @@ class DatabaseManager:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS message_templates (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,6 +148,7 @@ class DatabaseManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS delete_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,7 +161,23 @@ class DatabaseManager:
                 )
             ''')
 
-            # Migrations: Ensure existing tables have the 'site' column
+            # --- MIGRATIONS ---
+            # 1. Ensure 'ip_lintas' and 'ip_icon' columns in routers table
+            try:
+                cursor = conn.execute("PRAGMA table_info(routers)")
+                router_cols = [row['name'] for row in cursor.fetchall()]
+                if 'ip_lintas' not in router_cols:
+                    conn.execute("ALTER TABLE routers ADD COLUMN ip_lintas TEXT")
+                    conn.execute("UPDATE routers SET ip_lintas = ip WHERE (provider = 'lintasarta' OR ip_lintas IS NULL) AND ip IS NOT NULL")
+                    logger.info("Migrated routers: added 'ip_lintas' column")
+                if 'ip_icon' not in router_cols:
+                    conn.execute("ALTER TABLE routers ADD COLUMN ip_icon TEXT")
+                    conn.execute("UPDATE routers SET ip_icon = ip WHERE provider = 'icon' AND ip IS NOT NULL")
+                    logger.info("Migrated routers: added 'ip_icon' column")
+            except Exception as e:
+                logger.warning(f"Could not verify dual IP columns in routers: {e}")
+
+            # 2. Ensure 'site' in downtime_history and latency_history
             try:
                 cursor = conn.execute("PRAGMA table_info(downtime_history)")
                 downtime_cols = [row['name'] for row in cursor.fetchall()]
@@ -203,14 +228,14 @@ class DatabaseManager:
             # Default WhatsApp message templates
             default_templates = [
                 (
-                    'Eskalasi Gangguan ke PIC Cabang',
+                    'Pemberitahuan Kendala ke PIC Cabang',
                     'pic',
-                    'Halo Bapak/Ibu {pic_name} di Cabang {site}, kami mendeteksi link jaringan sedang DOWN (IP: {ip}, Nojar Versa: {nojar_versa}, Nojar Starlink: {nojar_starlink}). Mohon konfirmasi apakah ada kendala listrik/perangkat di lokasi. Terima kasih.'
+                    'Halo Bapak/Ibu {pic_name} di Cabang {site}, kami mendeteksi link jaringan {provider_info} (IP: {ip}, Versa: {nojar_versa}, Starlink: {nojar_starlink}) sedang DOWN. Mohon konfirmasi apakah terjadi pemadaman listrik atau kendala di lokasi cabang. Terima kasih.'
                 ),
                 (
-                    'Laporan Gangguan ke NOC Provider',
+                    'Eskalasi Gangguan ke Helpdesk Provider',
                     'provider',
-                    'Yth. Helpdesk Provider, mohon open tiket gangguan link di Bank Kalsel Cabang {site}. IP: {ip}, Nojar Versa: {nojar_versa}, Nojar Starlink: {nojar_starlink}. Mohon segera dicek dari sisi provider. Terima kasih.'
+                    'Yth. Helpdesk Provider, mohon open tiket gangguan link SD-WAN Bank Kalsel Cabang {site}. Provider: {provider_info}, IP: {ip}, Nojar Versa: {nojar_versa}, Nojar Starlink: {nojar_starlink}. Mohon segera dicek dari sisi network. Terima kasih.'
                 ),
             ]
             for name, tmpl_type, content in default_templates:

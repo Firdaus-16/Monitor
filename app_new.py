@@ -23,7 +23,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Secret key from environment variable or constant default for production session persistence
 app.secret_key = os.environ.get('SECRET_KEY', 'bank-kalsel-sdwan-secret-2026-production')
 
 db_manager = DatabaseManager()
@@ -133,7 +132,7 @@ def health_check():
 def index():
     return render_template('index.html', username=session.get('username'), role=session.get('role'))
 
-# --- Router Management (CRUD) ---
+# --- Router Management (Dual-IP SD-WAN per Router) ---
 @app.route('/api/routers', methods=['GET'])
 @login_required
 def get_routers():
@@ -141,63 +140,99 @@ def get_routers():
         conn = db_manager.get_connection()
         cursor = conn.execute('''
             SELECT r.*, 
-                   COALESCE(rs.status, 'unknown') as status,
-                   rs.fail_count,
-                   rs.up_since,
-                   rs.down_time as last_down_time,
-                   rs.high_latency_active,
-                   rs.last_updated
+                   COALESCE(rl.status, 'unknown') as status_lintas,
+                   rl.fail_count as fail_count_lintas,
+                   rl.high_latency_active as high_latency_lintas,
+                   COALESCE(ri.status, 'unknown') as status_icon,
+                   ri.fail_count as fail_count_icon,
+                   ri.high_latency_active as high_latency_icon
             FROM routers r
-            LEFT JOIN runtime_states rs ON r.ip = rs.ip
-            ORDER BY r.site ASC, r.provider ASC
+            LEFT JOIN runtime_states rl ON r.ip_lintas = rl.ip AND r.ip_lintas IS NOT NULL AND r.ip_lintas != ''
+            LEFT JOIN runtime_states ri ON r.ip_icon = ri.ip AND r.ip_icon IS NOT NULL AND r.ip_icon != ''
+            ORDER BY r.site ASC
         ''')
-        routers = [dict(row) for row in cursor.fetchall()]
+        rows = [dict(row) for row in cursor.fetchall()]
         conn.close()
-        return jsonify(routers)
+
+        # Compute composite status for each SD-WAN branch router
+        for r in rows:
+            sl = r.get('status_lintas') or 'unknown'
+            si = r.get('status_icon') or 'unknown'
+            has_l = bool(r.get('ip_lintas'))
+            has_i = bool(r.get('ip_icon'))
+
+            if has_l and has_i:
+                if sl == 'up' and si == 'up':
+                    r['status'] = 'dual_up' # Dual Online (Hijau)
+                elif sl == 'down' and si == 'down':
+                    r['status'] = 'down'    # Total Down (Merah)
+                elif sl == 'up' or si == 'up':
+                    r['status'] = 'partial' # 1 Link Down, Backup Aktif (Kuning)
+                else:
+                    r['status'] = 'unknown'
+            elif has_l:
+                r['status'] = sl
+            elif has_i:
+                r['status'] = si
+            else:
+                r['status'] = 'unknown'
+
+        return jsonify(rows)
     except Exception as e:
         logger.error(f"Error getting routers: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/routers/<ip>', methods=['GET'])
+@app.route('/api/routers/<router_id>', methods=['GET'])
 @login_required
-def get_router(ip):
+def get_router(router_id):
     try:
         conn = db_manager.get_connection()
         cursor = conn.execute('''
-            SELECT r.*, COALESCE(rs.status, 'unknown') as status 
+            SELECT r.*, 
+                   COALESCE(rl.status, 'unknown') as status_lintas,
+                   COALESCE(ri.status, 'unknown') as status_icon
             FROM routers r 
-            LEFT JOIN runtime_states rs ON r.ip = rs.ip
-            WHERE r.ip = ?
-        ''', (ip,))
+            LEFT JOIN runtime_states rl ON r.ip_lintas = rl.ip AND r.ip_lintas IS NOT NULL
+            LEFT JOIN runtime_states ri ON r.ip_icon = ri.ip AND r.ip_icon IS NOT NULL
+            WHERE r.id = ? OR r.ip = ? OR r.ip_lintas = ? OR r.ip_icon = ?
+        ''', (router_id, router_id, router_id, router_id))
         row = cursor.fetchone()
         conn.close()
         if not row:
             return jsonify({"error": "Router not found"}), 404
         return jsonify(dict(row))
     except Exception as e:
-        logger.error(f"Error getting router {ip}: {e}")
+        logger.error(f"Error getting router {router_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/routers', methods=['POST'])
 @admin_required
 def create_router():
     data = request.get_json() or {}
-    required = ['site', 'name', 'ip', 'provider']
-    missing = [f for f in required if not data.get(f)]
-    if missing:
-        return jsonify({"error": f"Kolom wajib belum diisi: {', '.join(missing)}"}), 400
+    site = data.get('site', '').strip()
+    ip_lintas = data.get('ip_lintas', '').strip()
+    ip_icon = data.get('ip_icon', '').strip()
+    primary_ip = ip_lintas or ip_icon or data.get('ip', '').strip()
+
+    if not site:
+        return jsonify({"error": "Nama Site / Cabang wajib diisi"}), 400
+    if not ip_lintas and not ip_icon:
+        return jsonify({"error": "Minimal isi salah satu IP (IP Lintasarta atau IP ICON)"}), 400
+
+    name = data.get('name', '').strip() or f"router-{site.replace(' ', '_').lower()}-sdwan"
+    provider_tag = 'dual' if (ip_lintas and ip_icon) else ('lintasarta' if ip_lintas else 'icon')
 
     try:
         conn = db_manager.get_connection()
         cursor = conn.execute('''
-            INSERT INTO routers (site, name, ip, provider, access_type, 
+            INSERT INTO routers (site, name, ip, ip_lintas, ip_icon, provider, access_type, 
                                  nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
                                  router_versa_name, router_model, router_versa_regist, psu_regist,
                                  pic_name, pic_phone, pic_provider_phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            data.get('site'), data.get('name'), data.get('ip'), data.get('provider').lower(),
-            data.get('access_type', 'SD-WAN'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
+            site, name, primary_ip, ip_lintas, ip_icon, provider_tag,
+            data.get('access_type', 'Versa SD-WAN'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
             data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
             data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
             data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone')
@@ -206,35 +241,47 @@ def create_router():
         new_id = cursor.lastrowid
         conn.close()
         log_audit('CREATE', 'routers', new_id, None, data)
-        return jsonify({"message": "Router created successfully", "id": new_id}), 201
+        return jsonify({"message": "Router SD-WAN berhasil ditambahkan", "id": new_id}), 201
     except Exception as e:
         logger.error(f"Error creating router: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/routers/<ip>', methods=['PUT'])
+@app.route('/api/routers/<router_id>', methods=['PUT'])
 @admin_required
-def update_router(ip):
+def update_router(router_id):
     data = request.get_json() or {}
     try:
         conn = db_manager.get_connection()
-        old_router = conn.execute('SELECT * FROM routers WHERE ip = ?', (ip,)).fetchone()
+        old_router = conn.execute(
+            'SELECT * FROM routers WHERE id = ? OR ip = ? OR ip_lintas = ? OR ip_icon = ?',
+            (router_id, router_id, router_id, router_id)
+        ).fetchone()
+
         if not old_router:
             conn.close()
-            return jsonify({"error": "Router not found"}), 404
+            return jsonify({"error": "Router tidak ditemukan"}), 404
 
         old_value = dict(old_router)
+        site = data.get('site', old_value['site'])
+        ip_lintas = data.get('ip_lintas', old_value.get('ip_lintas') or '')
+        ip_icon = data.get('ip_icon', old_value.get('ip_icon') or '')
+        primary_ip = ip_lintas or ip_icon or old_value['ip']
+        provider_tag = 'dual' if (ip_lintas and ip_icon) else ('lintasarta' if ip_lintas else 'icon')
+
         cursor = conn.execute('''
             UPDATE routers SET 
-                site = ?, name = ?, ip = ?, provider = ?, access_type = ?,
+                site = ?, name = ?, ip = ?, ip_lintas = ?, ip_icon = ?, provider = ?, access_type = ?,
                 nojar_cpe_versa = ?, nojar_starlink = ?, latitude = ?, longitude = ?, timezone = ?,
                 router_versa_name = ?, router_model = ?, router_versa_regist = ?, psu_regist = ?,
                 pic_name = ?, pic_phone = ?, pic_provider_phone = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE ip = ?
+            WHERE id = ?
         ''', (
-            data.get('site', old_value['site']),
+            site,
             data.get('name', old_value['name']),
-            data.get('ip', old_value['ip']),
-            data.get('provider', old_value['provider']).lower(),
+            primary_ip,
+            ip_lintas,
+            ip_icon,
+            provider_tag,
             data.get('access_type', old_value['access_type']),
             data.get('nojar_cpe_versa', old_value['nojar_cpe_versa']),
             data.get('nojar_starlink', old_value['nojar_starlink']),
@@ -248,35 +295,46 @@ def update_router(ip):
             data.get('pic_name', old_value['pic_name']),
             data.get('pic_phone', old_value['pic_phone']),
             data.get('pic_provider_phone', old_value['pic_provider_phone']),
-            ip
+            old_value['id']
         ))
         conn.commit()
         conn.close()
-        log_audit('UPDATE', 'routers', ip, old_value, data)
-        return jsonify({"message": "Router updated successfully"}), 200
+        log_audit('UPDATE', 'routers', old_value['id'], old_value, data)
+        return jsonify({"message": "Router berhasil diperbarui"}), 200
     except Exception as e:
-        logger.error(f"Error updating router {ip}: {e}")
+        logger.error(f"Error updating router {router_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/routers/<ip>', methods=['DELETE'])
+@app.route('/api/routers/<router_id>', methods=['DELETE'])
 @admin_required
-def delete_router(ip):
+def delete_router(router_id):
     try:
         conn = db_manager.get_connection()
-        old_router = conn.execute('SELECT * FROM routers WHERE ip = ?', (ip,)).fetchone()
+        old_router = conn.execute(
+            'SELECT * FROM routers WHERE id = ? OR ip = ? OR ip_lintas = ? OR ip_icon = ?',
+            (router_id, router_id, router_id, router_id)
+        ).fetchone()
+
         if not old_router:
             conn.close()
-            return jsonify({"error": "Router not found"}), 404
+            return jsonify({"error": "Router tidak ditemukan"}), 404
 
         old_value = dict(old_router)
-        conn.execute('DELETE FROM routers WHERE ip = ?', (ip,))
-        conn.execute('DELETE FROM runtime_states WHERE ip = ?', (ip,))
+        r_id = old_value['id']
+        conn.execute('DELETE FROM routers WHERE id = ?', (r_id,))
+        if old_value.get('ip_lintas'):
+            conn.execute('DELETE FROM runtime_states WHERE ip = ?', (old_value['ip_lintas'],))
+        if old_value.get('ip_icon'):
+            conn.execute('DELETE FROM runtime_states WHERE ip = ?', (old_value['ip_icon'],))
+        if old_value.get('ip'):
+            conn.execute('DELETE FROM runtime_states WHERE ip = ?', (old_value['ip'],))
+
         conn.commit()
         conn.close()
-        log_audit('DELETE', 'routers', ip, old_value, None)
-        return jsonify({"message": "Router deleted successfully"}), 200
+        log_audit('DELETE', 'routers', r_id, old_value, None)
+        return jsonify({"message": "Router berhasil dihapus"}), 200
     except Exception as e:
-        logger.error(f"Error deleting router {ip}: {e}")
+        logger.error(f"Error deleting router {router_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 # --- Map & Sites ---
@@ -286,15 +344,43 @@ def get_map_routers():
     try:
         conn = db_manager.get_connection()
         routers = conn.execute('''
-            SELECT r.site, r.name, r.ip, r.provider, r.access_type, 
+            SELECT r.id, r.site, r.name, r.ip_lintas, r.ip_icon, r.access_type, 
                    r.latitude, r.longitude, r.pic_name, r.pic_phone, r.timezone,
-                   COALESCE(rs.status, 'unknown') as status
+                   COALESCE(rl.status, 'unknown') as status_lintas,
+                   COALESCE(ri.status, 'unknown') as status_icon
             FROM routers r
-            LEFT JOIN runtime_states rs ON r.ip = rs.ip
+            LEFT JOIN runtime_states rl ON r.ip_lintas = rl.ip AND r.ip_lintas IS NOT NULL AND r.ip_lintas != ''
+            LEFT JOIN runtime_states ri ON r.ip_icon = ri.ip AND r.ip_icon IS NOT NULL AND r.ip_icon != ''
             WHERE r.latitude IS NOT NULL AND r.longitude IS NOT NULL
         ''').fetchall()
         conn.close()
-        return jsonify([dict(row) for row in routers])
+
+        results = []
+        for row in routers:
+            r = dict(row)
+            sl = r.get('status_lintas') or 'unknown'
+            si = r.get('status_icon') or 'unknown'
+            has_l = bool(r.get('ip_lintas'))
+            has_i = bool(r.get('ip_icon'))
+
+            if has_l and has_i:
+                if sl == 'up' and si == 'up':
+                    r['status'] = 'dual_up'
+                elif sl == 'down' and si == 'down':
+                    r['status'] = 'down'
+                elif sl == 'up' or si == 'up':
+                    r['status'] = 'partial'
+                else:
+                    r['status'] = 'unknown'
+            elif has_l:
+                r['status'] = sl
+            elif has_i:
+                r['status'] = si
+            else:
+                r['status'] = 'unknown'
+            results.append(r)
+
+        return jsonify(results)
     except Exception as e:
         logger.error(f"Error getting map routers: {e}")
         return jsonify({"error": str(e)}), 500
@@ -499,7 +585,7 @@ def update_user(user_id):
         log_audit('UPDATE', 'users', user_id, dict(old_user), {"username": username, "role": new_role})
         return jsonify({"message": "User updated"}), 200
     except Exception as e:
-        logger.error(f"Error updating user: {e}")
+        logger.error(f"Error updating user {user_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
@@ -598,13 +684,20 @@ def update_whatsapp_template(template_id):
 @login_required
 def generate_whatsapp_url():
     data = request.get_json() or {}
+    router_id = data.get('router_id')
     ip = data.get('ip')
+    link_choice = data.get('link_choice', 'both') # 'lintasarta', 'icon', 'both'
     template_type = data.get('template_type', 'pic')
     template_id = data.get('template_id')
     
     try:
         conn = db_manager.get_connection()
-        router = conn.execute('SELECT * FROM routers WHERE ip = ?', (ip,)).fetchone()
+        if router_id:
+            router = conn.execute('SELECT * FROM routers WHERE id = ?', (router_id,)).fetchone()
+        elif ip:
+            router = conn.execute('SELECT * FROM routers WHERE ip_lintas = ? OR ip_icon = ? OR ip = ?', (ip, ip, ip)).fetchone()
+        else:
+            router = None
         
         if template_id:
             template = conn.execute('SELECT * FROM message_templates WHERE id = ?', (template_id,)).fetchone()
@@ -619,11 +712,26 @@ def generate_whatsapp_url():
             message = template['content']
         else:
             if template_type == 'pic':
-                message = "Halo Bapak/Ibu {pic_name} di Cabang {site}, kami mendeteksi link jaringan (IP: {ip}, Versa: {nojar_versa}, Starlink: {nojar_starlink}) sedang DOWN. Mohon konfirmasi kondisi listrik/perangkat di lokasi."
+                message = "Halo Bapak/Ibu {pic_name} di Cabang {site}, kami mendeteksi link jaringan {provider_info} (IP: {ip}, Versa: {nojar_versa}, Starlink: {nojar_starlink}) sedang DOWN. Mohon konfirmasi kondisi di lokasi."
             else:
-                message = "Yth. Helpdesk Provider, mohon open tiket gangguan link di Bank Kalsel Cabang {site} (IP: {ip}, Versa: {nojar_versa}, Starlink: {nojar_starlink}). Mohon segera dilakukan pengecekan."
+                message = "Yth. Helpdesk Provider, mohon open tiket gangguan link di Bank Kalsel Cabang {site} ({provider_info}, IP: {ip}, Versa: {nojar_versa}, Starlink: {nojar_starlink}). Mohon segera dilakukan pengecekan."
+
+        # Link choice & IP substitution
+        if link_choice == 'lintasarta':
+            target_ip = router['ip_lintas'] or router['ip'] or '-'
+            provider_info = 'Lintasarta (Versa SD-WAN)'
+        elif link_choice == 'icon':
+            target_ip = router['ip_icon'] or router['ip'] or '-'
+            provider_info = 'PLN Icon Plus (Starlink)'
+        else:
+            l_ip = router['ip_lintas'] or '-'
+            i_ip = router['ip_icon'] or '-'
+            target_ip = f"Lintas: {l_ip} | ICON: {i_ip}"
+            provider_info = 'KEDUA LINK (Lintasarta & ICON)'
+
         message = message.replace('{site}', router['site'] or '')
-        message = message.replace('{ip}', router['ip'] or '')
+        message = message.replace('{ip}', target_ip)
+        message = message.replace('{provider_info}', provider_info)
         message = message.replace('{pic_name}', router['pic_name'] or 'PIC')
         message = message.replace('{nojar_versa}', router['nojar_cpe_versa'] or '-')
         message = message.replace('{nojar_starlink}', router['nojar_starlink'] or '-')
@@ -811,7 +919,7 @@ def export_latency():
         logger.error(f"Error exporting latency: {e}")
         return jsonify({"error": str(e)}), 500
 
-# --- Safe Data Retention & Deletion API (Parameterized) ---
+# --- Safe Data Retention & Deletion API ---
 def build_safe_delete_filter(filter_type, filter_value, date_column='down_time'):
     if filter_type == 'all':
         return '1=1', []
@@ -927,8 +1035,13 @@ def delete_runtime():
         if filter_type == 'all':
             cursor = conn.execute('DELETE FROM runtime_states')
         elif filter_type == 'site' and filter_value:
-            routers = conn.execute('SELECT ip FROM routers WHERE site = ?', (filter_value,)).fetchall()
-            ips = [r['ip'] for r in routers]
+            routers = conn.execute('SELECT ip_lintas, ip_icon, ip FROM routers WHERE site = ?', (filter_value,)).fetchall()
+            ips = []
+            for r in routers:
+                if r['ip_lintas']: ips.append(r['ip_lintas'])
+                if r['ip_icon']: ips.append(r['ip_icon'])
+                if r['ip']: ips.append(r['ip'])
+            ips = list(set(ips))
             if ips:
                 placeholders = ','.join('?' * len(ips))
                 cursor = conn.execute(f'DELETE FROM runtime_states WHERE ip IN ({placeholders})', ips)
@@ -1002,7 +1115,6 @@ def delete_audit_log():
 
 # --- Background Scheduler Setup (Runs Only Once) ---
 def init_scheduler():
-    # Avoid duplicate scheduler execution in Werkzeug reloader or multi-worker setups
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'false':
         return
     try:
@@ -1018,7 +1130,6 @@ def init_scheduler():
 init_scheduler()
 
 if __name__ == '__main__':
-    # Gunakan port 5050 (atau konfigurasi PORT) agar terhindar dari bentrok proses lama di port 5000
     port = int(os.environ.get('PORT', 5050))
     print(f"\n=======================================================")
     print(f"  SD-WAN Monitoring Server aktif di: http://localhost:{port}")
