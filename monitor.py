@@ -57,7 +57,7 @@ def check_latency(ip):
     _, latency = ping_host_and_latency(ip)
     return latency
 
-def check_single_link(ip, provider, site, name, conn, ping_res=None):
+def check_single_link(ip, provider, site, name, conn, ping_res=None, nojar_versa=None, nojar_starlink=None):
     """Update runtime state and incident history for a specific link IP."""
     if not ip:
         return None
@@ -87,6 +87,19 @@ def check_single_link(ip, provider, site, name, conn, ping_res=None):
             0 if is_up else 1,
             False, 0, now_str
         ))
+        if not is_up:
+            provider_label = 'Lintasarta' if str(provider).lower().startswith('lintas') else 'ICON'
+            link_label = 'Link 1 (Lintasarta)' if str(provider).lower().startswith('lintas') else 'Link 2 (ICON/Fiber)'
+            send_telegram_message(
+                f"🚨 <b>LINK DOWN — {provider_label}</b> ({link_label})\\n"
+                f"━━━━━━━━━━━━━━━━\\n"
+                f"Cabang     : <b>{site}</b>\\n"
+                f"IP {link_label}   : <code>{ip}</code>\\n"
+                f"Nojar Versa (Lintasarta)   : {nojar_versa or '-'}\\n"
+                f"Nojar Starlink (Lintasarta): {nojar_starlink or '-'}\\n"
+                f"Waktu Down : {now_str}",
+                provider=provider
+            )
     else:
         old_status = state['status']
         fail_count = state['fail_count'] or 0
@@ -102,8 +115,21 @@ def check_single_link(ip, provider, site, name, conn, ping_res=None):
                 SET status = ?, first_rto_time = ?, down_time = ?, fail_count = ?, last_updated = ?
                 WHERE ip = ?
             ''', (new_status, now_str, now_str, fail_count, now_str, ip))
+            # Immediate down notification with nojar info
+            provider_label = 'Lintasarta' if str(provider).lower().startswith('lintas') else 'ICON'
+            link_label = 'Link 1 (Lintasarta)' if str(provider).lower().startswith('lintas') else 'Link 2 (ICON/Fiber)'
+            send_telegram_message(
+                f"🚨 <b>LINK DOWN — {provider_label}</b> ({link_label})\\n"
+                f"━━━━━━━━━━━━━━━━\\n"
+                f"Cabang     : <b>{site}</b>\\n"
+                f"IP {link_label}   : <code>{ip}</code>\\n"
+                f"Nojar Versa (Lintasarta)   : {nojar_versa or '-'}\\n"
+                f"Nojar Starlink (Lintasarta): {nojar_starlink or '-'}\\n"
+                f"Waktu Down : {now_str}",
+                provider=provider
+            )
             if fail_count >= CONSISTENCY_CHECKS:
-                send_telegram_message(f"⚠️ <b>WARNING</b>: Link {provider.upper()} DOWN di {site} ({ip}) - {CONSISTENCY_CHECKS} menit", provider=provider)
+                send_telegram_message(f"⚠️ <b>WARNING</b>: Link {provider.upper()} DOWN di {site} ({ip}) - {CONSISTENCY_CHECKS} menit\nVersa: {nojar_versa or '-'}\nStarlink: {nojar_starlink or '-'}", provider=provider)
 
         # DOWN -> UP
         elif old_status == 'down' and new_status == 'up':
@@ -127,18 +153,37 @@ def check_single_link(ip, provider, site, name, conn, ping_res=None):
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (site, name, ip, provider, first_down_time or now_str, now_str, down_duration))
 
-            duration_min = max(1, int(down_duration / 60))
-            send_telegram_message(f"✅ <b>OK (RECOVERED)</b>: Link {provider.upper()} UP kembali di {site} ({ip}) - Down selama {duration_min} menit", provider=provider)
+            duration_min = max(1, int(down_duration / 60)) if down_duration else 0
+            duration_sec = down_duration % 60 if down_duration else 0
+            duration_str = f"{duration_min} menit {duration_sec} detik" if down_duration else "-"
+            provider_label = 'Lintasarta' if str(provider).lower().startswith('lintas') else 'ICON'
+            link_label = 'Link 1 (Lintasarta)' if str(provider).lower().startswith('lintas') else 'Link 2 (ICON/Fiber)'
+            send_telegram_message(
+                f"✅ <b>LINK UP (RECOVERED)</b> — {provider_label} ({link_label})\\n"
+                f"━━━━━━━━━━━━━━━━\\n"
+                f"Cabang     : <b>{site}</b>\\n"
+                f"IP {link_label}   : <code>{ip}</code>\\n"
+                f"Nojar Versa (Lintasarta)   : {nojar_versa or '-'}\\n"
+                f"Nojar Starlink (Lintasarta): {nojar_starlink or '-'}\\n"
+                f"Waktu Down : {first_down_time or now_str}\\n"
+                f"Waktu Up   : {now_str}\\n"
+                f"Durasi Down: {duration_str}",
+                provider=provider
+            )
 
         # Still DOWN
         elif old_status == 'down' and new_status == 'down':
             fail_count += 1
             conn.execute('UPDATE runtime_states SET fail_count = ?, last_updated = ? WHERE ip = ?', (fail_count, now_str, ip))
             if fail_count == CONSISTENCY_CHECKS:
-                send_telegram_message(f"⚠️ <b>WARNING</b>: Link {provider.upper()} DOWN konsisten di {site} ({ip}) - {CONSISTENCY_CHECKS} menit", provider=provider)
+                provider_label = 'Lintasarta' if str(provider).lower().startswith('lintas') else 'ICON'
+                link_label = 'Link 1 (Lintasarta)' if str(provider).lower().startswith('lintas') else 'Link 2 (ICON/Fiber)'
+                send_telegram_message(f"⚠️ <b>WARNING</b>: {provider_label} DOWN konsisten di {site} ({ip}) - {CONSISTENCY_CHECKS} menit ({link_label})\nNojar Versa (Lintasarta): {nojar_versa or '-'}\nNojar Starlink (Lintasarta): {nojar_starlink or '-'}", provider=provider)
             elif fail_count > 0 and fail_count % 60 == 0:
                 hours = fail_count // 60
-                send_telegram_message(f"🔔 <b>REMINDER</b>: Link {provider.upper()} masih DOWN di {site} ({ip}) - Sudah {hours} jam", provider=provider)
+                provider_label = 'Lintasarta' if str(provider).lower().startswith('lintas') else 'ICON'
+                link_label = 'Link 1 (Lintasarta)' if str(provider).lower().startswith('lintas') else 'Link 2 (ICON/Fiber)'
+                send_telegram_message(f"🔔 <b>REMINDER</b>: {provider_label} masih DOWN di {site} ({ip}) - Sudah {hours} jam ({link_label})\nNojar Versa (Lintasarta): {nojar_versa or '-'}\nNojar Starlink (Lintasarta): {nojar_starlink or '-'}", provider=provider)
 
         # Latency check for UP router
         if is_up and latency is not None:
@@ -149,14 +194,18 @@ def check_single_link(ip, provider, site, name, conn, ping_res=None):
                     high_latency_active = True
                     conn.execute('UPDATE runtime_states SET high_latency_active = 1, last_updated = ? WHERE ip = ?', (now_str, ip))
                     if latency > LATENCY_CRITICAL_MS:
-                        send_telegram_message(f"🔴 <b>CRITICAL</b>: Latency Link {provider.upper()} SANGAT TINGGI di {site} ({ip}): {latency}ms selama {CONSISTENCY_CHECKS} menit", provider=provider)
+                        provider_label = 'Lintasarta' if str(provider).lower().startswith('lintas') else 'ICON'
+                        link_label = 'Link 1 (Lintasarta)' if str(provider).lower().startswith('lintas') else 'Link 2 (ICON/Fiber)'
+                        send_telegram_message(f"🔴 <b>CRITICAL</b>: Latency {provider_label} SANGAT TINGGI di {site} ({ip}): {latency}ms selama {CONSISTENCY_CHECKS} menit ({link_label})\nNojar Versa (Lintasarta): {nojar_versa or '-'}\nNojar Starlink (Lintasarta): {nojar_starlink or '-'}", provider=provider)
                     else:
-                        send_telegram_message(f"🟡 <b>WARNING</b>: Latency Link {provider.upper()} tinggi di {site} ({ip}): {latency}ms selama {CONSISTENCY_CHECKS} menit", provider=provider)
+                        send_telegram_message(f"🟡 <b>WARNING</b>: Latency {provider_label} tinggi di {site} ({ip}): {latency}ms selama {CONSISTENCY_CHECKS} menit ({link_label})\nNojar Versa (Lintasarta): {nojar_versa or '-'}\nNojar Starlink (Lintasarta): {nojar_starlink or '-'}", provider=provider)
             else:
                 if high_latency_active:
                     high_latency_active = False
                     conn.execute('UPDATE runtime_states SET high_latency_active = 0, high_latency_fail_count = 0, last_updated = ? WHERE ip = ?', (now_str, ip))
-                    send_telegram_message(f"🟢 <b>OK</b>: Latency Link {provider.upper()} normal kembali di {site} ({ip}): {latency}ms", provider=provider)
+                    provider_label = 'Lintasarta' if str(provider).lower().startswith('lintas') else 'ICON'
+                    link_label = 'Link 1 (Lintasarta)' if str(provider).lower().startswith('lintas') else 'Link 2 (ICON/Fiber)'
+                    send_telegram_message(f"🟢 <b>OK</b>: Latency {provider_label} normal kembali di {site} ({ip}): {latency}ms ({link_label})\nNojar Versa (Lintasarta): {nojar_versa or '-'}\nNojar Starlink (Lintasarta): {nojar_starlink or '-'}", provider=provider)
                 else:
                     conn.execute('UPDATE runtime_states SET high_latency_fail_count = 0, last_updated = ? WHERE ip = ?', (now_str, ip))
 
@@ -187,13 +236,15 @@ def check_all_routers():
             ip_lintas = r['ip_lintas'] if 'ip_lintas' in r.keys() else None
             ip_icon = r['ip_icon'] if 'ip_icon' in r.keys() else None
             legacy_ip = r['ip']
+            nojar_versa = r['nojar_cpe_versa'] if 'nojar_cpe_versa' in r.keys() else None
+            nojar_starlink = r['nojar_starlink'] if 'nojar_starlink' in r.keys() else None
 
             if ip_lintas:
-                targets.append({'ip': ip_lintas, 'provider': 'lintasarta', 'site': site, 'name': name})
+                targets.append({'ip': ip_lintas, 'provider': 'lintasarta', 'site': site, 'name': name, 'nojar_versa': nojar_versa, 'nojar_starlink': nojar_starlink})
             if ip_icon:
-                targets.append({'ip': ip_icon, 'provider': 'icon', 'site': site, 'name': name})
+                targets.append({'ip': ip_icon, 'provider': 'icon', 'site': site, 'name': name, 'nojar_versa': nojar_versa, 'nojar_starlink': nojar_starlink})
             if not ip_lintas and not ip_icon and legacy_ip:
-                targets.append({'ip': legacy_ip, 'provider': r['provider'] or 'sdwan', 'site': site, 'name': name})
+                targets.append({'ip': legacy_ip, 'provider': r['provider'] or 'sdwan', 'site': site, 'name': name, 'nojar_versa': nojar_versa, 'nojar_starlink': nojar_starlink})
 
         if not targets:
             conn.close()
@@ -209,13 +260,15 @@ def check_all_routers():
 
         # Batch update database in main thread
         for target, ping_res in results:
-            check_single_link(target['ip'], target['provider'], target['site'], target['name'], conn, ping_res=ping_res)
+            check_single_link(target['ip'], target['provider'], target['site'], target['name'], conn, ping_res=ping_res, nojar_versa=target.get('nojar_versa'), nojar_starlink=target.get('nojar_starlink'))
 
         # Check for Dual Link Down (Both Down) per branch
         for r in routers:
             site = r['site']
             ip_lintas = r['ip_lintas'] if 'ip_lintas' in r.keys() else None
             ip_icon = r['ip_icon'] if 'ip_icon' in r.keys() else None
+            nojar_versa = r['nojar_cpe_versa'] if 'nojar_cpe_versa' in r.keys() else None
+            nojar_starlink = r['nojar_starlink'] if 'nojar_starlink' in r.keys() else None
 
             if ip_lintas and ip_icon:
                 state_l = conn.execute('SELECT status, fail_count FROM runtime_states WHERE ip = ?', (ip_lintas,)).fetchone()
@@ -225,9 +278,13 @@ def check_all_routers():
                     # Trigger alert only when threshold reached exactly or hourly reminder
                     if state_l['fail_count'] == CONSISTENCY_CHECKS or state_i['fail_count'] == CONSISTENCY_CHECKS:
                         send_telegram_message(
-                            f"🚨 <b>CRITICAL: KEDUA LINK DOWN</b> di <b>{site}</b>!\n"
-                            f"Link Lintasarta ({ip_lintas}) & ICON ({ip_icon}) mati serentak.\n"
-                            f"Kemungkinan pemadaman listrik (blackout) di lokasi cabang.",
+                            f"🚨🚨 <b>CRITICAL: KEDUA LINK DOWN</b> di <b>{site}</b>!\n"
+                            f"━━━━━━━━━━━━━━━━\n"
+                            f"Link 1 (Lintasarta) : {ip_lintas} [DOWN]\n"
+                            f"Link 2 (ICON/Fiber) : {ip_icon} [DOWN]\n"
+                            f"Nojar Versa (Lintasarta)   : {nojar_versa or '-'}\n"
+                            f"Nojar Starlink (Lintasarta): {nojar_starlink or '-'}\n"
+                            f"Kemungkinan blackout listrik di lokasi cabang.",
                             provider='all'
                         )
 

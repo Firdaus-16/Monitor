@@ -228,14 +228,16 @@ def create_router():
             INSERT INTO routers (site, name, ip, ip_lintas, ip_icon, provider, access_type, 
                                  nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
                                  router_versa_name, router_model, router_versa_regist, psu_regist,
-                                 pic_name, pic_phone, pic_provider_phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 pic_name, pic_phone, pic_provider_phone,
+                                 access_lintas, access_icon, kuota_langganan)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             site, name, primary_ip, ip_lintas, ip_icon, provider_tag,
             data.get('access_type', 'Versa SD-WAN'), data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
             data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
             data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
-            data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone')
+            data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'),
+            data.get('access_lintas', 'Fiber Optic'), data.get('access_icon', 'Fiber Optic'), data.get('kuota_langganan')
         ))
         conn.commit()
         new_id = cursor.lastrowid
@@ -273,7 +275,8 @@ def update_router(router_id):
                 site = ?, name = ?, ip = ?, ip_lintas = ?, ip_icon = ?, provider = ?, access_type = ?,
                 nojar_cpe_versa = ?, nojar_starlink = ?, latitude = ?, longitude = ?, timezone = ?,
                 router_versa_name = ?, router_model = ?, router_versa_regist = ?, psu_regist = ?,
-                pic_name = ?, pic_phone = ?, pic_provider_phone = ?, updated_at = CURRENT_TIMESTAMP
+                pic_name = ?, pic_phone = ?, pic_provider_phone = ?,
+                access_lintas = ?, access_icon = ?, kuota_langganan = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         ''', (
             site,
@@ -295,6 +298,9 @@ def update_router(router_id):
             data.get('pic_name', old_value['pic_name']),
             data.get('pic_phone', old_value['pic_phone']),
             data.get('pic_provider_phone', old_value['pic_provider_phone']),
+            data.get('access_lintas', old_value.get('access_lintas', 'Fiber Optic')),
+            data.get('access_icon', old_value.get('access_icon', 'Fiber Optic')),
+            data.get('kuota_langganan', old_value.get('kuota_langganan')),
             old_value['id']
         ))
         conn.commit()
@@ -335,6 +341,126 @@ def delete_router(router_id):
         return jsonify({"message": "Router berhasil dihapus"}), 200
     except Exception as e:
         logger.error(f"Error deleting router {router_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# --- Device Data Management ---
+@app.route('/api/devices', methods=['GET'])
+@login_required
+def get_devices():
+    try:
+        conn = db_manager.get_connection()
+        sql = "SELECT id, site, name, ip, ip_lintas, ip_icon, provider, access_type, nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone, router_versa_name, router_model, router_versa_regist, psu_regist, pic_name, pic_phone, pic_provider_phone, access_lintas, access_icon, kuota_langganan, created_at, updated_at FROM routers ORDER BY site"
+        devices = conn.execute(sql).fetchall()
+        conn.close()
+        return jsonify([dict(row) for row in devices])
+    except Exception as e:
+        logger.error(f"Error getting devices: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/devices/<int:device_id>', methods=['GET'])
+@login_required
+def get_device(device_id):
+    try:
+        conn = db_manager.get_connection()
+        device = conn.execute('SELECT * FROM routers WHERE id = ?', (device_id,)).fetchone()
+        conn.close()
+        if not device:
+            return jsonify({"error": "Perangkat tidak ditemukan"}), 404
+        return jsonify(dict(device))
+    except Exception as e:
+        logger.error(f"Error getting device {device_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/devices', methods=['POST'])
+@admin_required
+def create_device():
+    try:
+        data = request.get_json() or {}
+        site = data.get('site')
+        if not site:
+            return jsonify({"error": "Site wajib diisi"}), 400
+        conn = db_manager.get_connection()
+        existing = conn.execute('SELECT id FROM routers WHERE site = ?', (site,)).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({"error": "Site sudah ada"}), 400
+        cursor = conn.execute('''
+            INSERT INTO routers (site, name, ip, ip_lintas, ip_icon, provider, access_type,
+                                 nojar_cpe_versa, nojar_starlink, latitude, longitude, timezone,
+                                 router_versa_name, router_model, router_versa_regist, psu_regist,
+                                 pic_name, pic_phone, pic_provider_phone,
+                                 access_lintas, access_icon, kuota_langganan)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            site, data.get('site'), '', None, None, 'dual', data.get('access_type', 'SD-WAN'),
+            data.get('nojar_cpe_versa'), data.get('nojar_starlink'),
+            data.get('latitude'), data.get('longitude'), data.get('timezone', 'Asia/Makassar'),
+            data.get('router_versa_name'), data.get('router_model'), data.get('router_versa_regist'),
+            data.get('psu_regist'), data.get('pic_name'), data.get('pic_phone'), data.get('pic_provider_phone'),
+            data.get('access_lintas', 'Fiber Optic'), data.get('access_icon', 'Fiber Optic'), data.get('kuota_langganan')
+        ))
+        new_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        log_audit('CREATE', 'routers', new_id, None, data)
+        return jsonify({"message": "Perangkat berhasil ditambahkan", "id": new_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating device: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/devices/<int:device_id>', methods=['PUT'])
+@admin_required
+def update_device(device_id):
+    try:
+        data = request.get_json() or {}
+        conn = db_manager.get_connection()
+        old_value = conn.execute('SELECT * FROM routers WHERE id = ?', (device_id,)).fetchone()
+        if not old_value:
+            conn.close()
+            return jsonify({"error": "Perangkat tidak ditemukan"}), 404
+        old_value = dict(old_value)
+        conn.execute('''
+            UPDATE routers SET
+                router_model = ?, router_versa_regist = ?, psu_regist = ?,
+                kuota_langganan = ?, access_lintas = ?, access_icon = ?,
+                nojar_cpe_versa = ?, nojar_starlink = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (
+            data.get('router_model', old_value['router_model']),
+            data.get('router_versa_regist', old_value['router_versa_regist']),
+            data.get('psu_regist', old_value['psu_regist']),
+            data.get('kuota_langganan', old_value['kuota_langganan']),
+            data.get('access_lintas', old_value.get('access_lintas', 'Fiber Optic')),
+            data.get('access_icon', old_value.get('access_icon', 'Fiber Optic')),
+            data.get('nojar_cpe_versa', old_value['nojar_cpe_versa']),
+            data.get('nojar_starlink', old_value['nojar_starlink']),
+            device_id
+        ))
+        conn.commit()
+        conn.close()
+        log_audit('UPDATE', 'routers', device_id, old_value, data)
+        return jsonify({"message": "Data perangkat berhasil diperbarui"}), 200
+    except Exception as e:
+        logger.error(f"Error updating device {device_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/devices/<int:device_id>', methods=['DELETE'])
+@super_admin_required
+def delete_device_api(device_id):
+    try:
+        conn = db_manager.get_connection()
+        old_value = conn.execute('SELECT * FROM routers WHERE id = ?', (device_id,)).fetchone()
+        if not old_value:
+            conn.close()
+            return jsonify({"error": "Perangkat tidak ditemukan"}), 404
+        old_value = dict(old_value)
+        conn.execute('DELETE FROM routers WHERE id = ?', (device_id,))
+        conn.commit()
+        conn.close()
+        log_audit('DELETE', 'routers', device_id, old_value, None)
+        return jsonify({"message": "Data perangkat berhasil dihapus"}), 200
+    except Exception as e:
+        logger.error(f"Error deleting device {device_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 # --- Map & Sites ---
@@ -680,6 +806,47 @@ def update_whatsapp_template(template_id):
         logger.error(f"Error updating template: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/whatsapp/templates', methods=['POST'])
+@admin_required
+def create_whatsapp_template():
+    data = request.get_json() or {}
+    name = data.get('name')
+    tmpl_type = data.get('type', 'pic')
+    content = data.get('content')
+    if not name or not content:
+        return jsonify({"error": "Nama dan isi template wajib diisi"}), 400
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.execute(
+            'INSERT INTO message_templates (name, type, content) VALUES (?, ?, ?)',
+            (name, tmpl_type, content)
+        )
+        new_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        log_audit('CREATE', 'message_templates', new_id, None, data)
+        return jsonify({"message": "Template berhasil dibuat", "id": new_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating template: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/whatsapp/templates/<int:template_id>', methods=['DELETE'])
+@admin_required
+def delete_whatsapp_template(template_id):
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.execute('DELETE FROM message_templates WHERE id = ?', (template_id,))
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        if deleted == 0:
+            return jsonify({"error": "Template tidak ditemukan"}), 404
+        log_audit('DELETE', 'message_templates', template_id, None, {"deleted": deleted})
+        return jsonify({"message": "Template berhasil dihapus"}), 200
+    except Exception as e:
+        logger.error(f"Error deleting template: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/whatsapp/generate', methods=['POST'])
 @login_required
 def generate_whatsapp_url():
@@ -776,6 +943,37 @@ def upload_branches():
         return jsonify(result), 200
     else:
         return jsonify(result), 400
+
+# --- Excel Import Template ---
+@app.route('/api/import/template', methods=['GET'])
+@login_required
+def download_import_template():
+    import pandas as pd
+    from io import BytesIO
+    columns = ['Site/Cabang', 'IP Lintas', 'IP ICON', 'Access Type', 'Nojar Versa', 'Nojar Starlink', 'Lat', 'Long', 'Nama PIC', 'No WA PIC', 'No WA Provider', 'Nama Router Versa', 'Model Router', 'No Regist Router Versa', 'No Regist PSU']
+    sample = {
+        'Site/Cabang': ['Contoh Cabang'],
+        'IP Lintas': ['10.0.0.1'],
+        'IP ICON': ['10.0.0.2'],
+        'Access Type': ['Fiber Optic'],
+        'Nojar Versa': ['VR-001'],
+        'Nojar Starlink': ['SL-001'],
+        'Lat': [-3.3167],
+        'Long': [114.5901],
+        'Nama PIC': ['Budi'],
+        'No WA PIC': ['08123456789'],
+        'No WA Provider': ['08987654321'],
+        'Nama Router Versa': ['Versa CSG'],
+        'Model Router': ['Versa Flex'],
+        'No Regist Router Versa': ['REG-001'],
+        'No Regist PSU': ['PSU-001'],
+    }
+    df = pd.DataFrame(sample, columns=columns)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Template', index=False)
+    output.seek(0)
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='template_import_cabang.xlsx')
 
 # --- Excel Export Endpoints ---
 @app.route('/api/export/downtime', methods=['GET'])
@@ -1133,6 +1331,5 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5050))
     print(f"\n=======================================================")
     print(f"  SD-WAN Monitoring Server aktif di: http://localhost:{port}")
-    print(f"  Login: admin / admin123")
     print(f"=======================================================\n")
     app.run(host='0.0.0.0', port=port, debug=False)

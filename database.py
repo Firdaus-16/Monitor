@@ -67,6 +67,9 @@ class DatabaseManager:
                     pic_name TEXT,
                     pic_phone TEXT,
                     pic_provider_phone TEXT,
+                    access_lintas TEXT DEFAULT 'Fiber Optic',
+                    access_icon TEXT DEFAULT 'Fiber Optic',
+                    kuota_langganan TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -195,6 +198,22 @@ class DatabaseManager:
                     logger.info("Migrated latency_history: added 'site' column")
             except Exception as e:
                 logger.warning(f"Could not verify 'site' column in latency_history: {e}")
+
+            # 3. Ensure device/access columns in routers table
+            try:
+                cursor = conn.execute("PRAGMA table_info(routers)")
+                router_cols = [row['name'] for row in cursor.fetchall()]
+                if 'access_lintas' not in router_cols:
+                    conn.execute("ALTER TABLE routers ADD COLUMN access_lintas TEXT DEFAULT 'Fiber Optic'")
+                    logger.info("Migrated routers: added 'access_lintas' column")
+                if 'access_icon' not in router_cols:
+                    conn.execute("ALTER TABLE routers ADD COLUMN access_icon TEXT DEFAULT 'Fiber Optic'")
+                    logger.info("Migrated routers: added 'access_icon' column")
+                if 'kuota_langganan' not in router_cols:
+                    conn.execute("ALTER TABLE routers ADD COLUMN kuota_langganan TEXT")
+                    logger.info("Migrated routers: added 'kuota_langganan' column")
+            except Exception as e:
+                logger.warning(f"Could not verify device/access columns in routers: {e}")
 
             # Default users
             users = [

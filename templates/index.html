@@ -63,6 +63,9 @@
                         <a class="nav-link-tab" id="btn-tab-settings" onclick="switchTab('tab-settings')"><i class="bi bi-gear-fill me-1"></i> Konfigurasi</a>
                     </li>
                     {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link-tab" id="btn-tab-devices" onclick="switchTab('tab-devices')"><i class="bi bi-device-tablet me-1"></i> Data Perangkat</a>
+                    </li>
                 </ul>
                 <div class="d-flex align-items-center text-light">
                     <span class="me-3">
@@ -184,12 +187,15 @@
         <!-- ==================== TAB 2: PETA CABANG ==================== -->
         <div id="tab-map" class="tab-content-area d-none">
             <div class="card p-3 mb-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                     <div>
                         <h5 class="fw-bold mb-0"><i class="bi bi-map-fill me-2 text-primary"></i>Peta Persebaran Jaringan SD-WAN Bank Kalsel</h5>
                         <small class="text-muted">Titik Hijau: Dual Online | Kuning: 1 Link Down | Merah: Total Down</small>
                     </div>
-                    <button class="btn btn-sm btn-outline-primary" onclick="initOrInvalidateMap()"><i class="bi bi-arrows-fullscreen me-1"></i> Reset Peta</button>
+                    <div class="d-flex gap-2">
+                        <input type="text" id="map-search" class="form-control form-control-sm" placeholder="Cari site / IP..." oninput="filterMapMarkers()" style="width:220px;">
+                        <button class="btn btn-sm btn-outline-primary" onclick="initOrInvalidateMap()"><i class="bi bi-arrows-fullscreen me-1"></i> Reset Peta</button>
+                    </div>
                 </div>
                 <div id="map"></div>
             </div>
@@ -341,9 +347,80 @@
                         <button type="button" class="btn btn-danger btn-sm" onclick="executePurge()"><i class="bi bi-trash me-1"></i> Bersihkan Data Sekarang</button>
                     </div>
                 </div>
-            </div>
-        </div>
-        {% endif %}
+                <!-- User Management -->
+                <div class="col-lg-6">
+                    <div class="card p-4 h-100">
+                        <h5 class="fw-bold mb-3"><i class="bi bi-people-fill me-2 text-primary"></i>Manajemen User</h5>
+                        <div class="mb-3">
+                            <button class="btn btn-primary btn-sm" onclick="showAddUserModal()"><i class="bi bi-plus-lg me-1"></i> Tambah User</button>
+                            {% if role == 'super_admin' %}<button class="btn btn-outline-secondary btn-sm" onclick="loadAuditLog()"><i class="bi bi-journal-text me-1"></i> Lihat Audit Log</button>{% endif %}
+                        </div>
+                        <div class="table-responsive" style="max-height:260px;">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light"><tr><th>Username</th><th>Role</th><th>Aksi</th></tr></thead>
+                                <tbody id="users-table-body"></tbody>
+                            </table>
+                        </div>
+                        <div id="audit-log-container" class="mt-3 d-none">
+                            <h6 class="fw-bold">Audit Log</h6>
+                            <div class="table-responsive" style="max-height:200px;">
+                                <table class="table table-sm"><thead class="table-light"><tr><th>Waktu</th><th>User</th><th>Aksi</th><th>Tabel</th></tr></thead><tbody id="audit-log-body"></tbody></table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WhatsApp Templates -->
+                <div class="col-lg-6">
+                    <div class="card p-4 h-100">
+                        <h5 class="fw-bold mb-3"><i class="bi bi-whatsapp me-2 text-success"></i>Template Pesan WhatsApp</h5>
+                        <div class="mb-3">
+                            <button class="btn btn-success btn-sm" onclick="showAddTemplateModal()"><i class="bi bi-plus-lg me-1"></i> Tambah Template</button>
+                        </div>
+                        <div class="table-responsive" style="max-height:260px;">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light"><tr><th>Nama</th><th>Tipe</th><th>Aksi</th></tr></thead>
+                                <tbody id="wa-templates-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                <!-- Data Perangkat Tab -->
+                <div id="tab-devices" class="tab-content-area d-none">
+                    <div class="card p-3 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                            <div>
+                                <h5 class="fw-bold mb-0"><i class="bi bi-device-tablet me-2 text-primary"></i>Data Perangkat SD-WAN Bank Kalsel</h5>
+                                <small class="text-muted">Data aset perangkat: model router, registrasi, akses, kuota langganan.</small>
+                            </div>
+                            <div class="d-flex gap-2">
+                                {% if role in ['admin', 'super_admin'] %}
+                                <button class="btn btn-primary btn-sm" onclick="showAddDeviceModal()"><i class="bi bi-plus-lg me-1"></i> Tambah Perangkat</button>
+                                {% endif %}
+                                <button class="btn btn-sm btn-outline-primary" onclick="loadDevices()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh</button>
+                            </div>
+                        </div>
+                        <div class="table-responsive" style="max-height:520px;">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Site</th>
+                                        <th>Model Router</th>
+                                        <th>Regist Versa</th>
+                                        <th>Regist PSU</th>
+                                        <th>Akses Link 1</th>
+                                        <th>Akses Link 2</th>
+                                        <th>Kuota</th>
+                                        <th>Nojar Versa</th>
+                                        <th>Nojar Starlink</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="devices-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
     </div>
 
     <!-- ==================== MODAL: WHATSAPP ESKALASI ==================== -->
@@ -469,7 +546,10 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="small text-muted">Upload file spreadsheet Excel (.xlsx / .xls). Sistem akan otomatis membaca kolom <strong>IP Lintas</strong> dan <strong>IP ICON</strong> untuk setiap kantor cabang.</p>
+                    <p class="small text-muted">Upload file spreadsheet Excel (.xlsx / .xls). Sistem akan otomatis membaca kolom <strong>IP Lintas</strong> dan <strong>IP ICON</strong> untuk setiap kantor cabang. Nama kolom fleksibel (case-insensitive). Unduh template di bawah ini.</p>
+                <div class="mb-3">
+                    <a href="/api/import/template" class="btn btn-outline-primary btn-sm"><i class="bi bi-download me-1"></i> Unduh Template Excel</a>
+                </div>
                     <form id="form-import" onsubmit="uploadExcel(event)">
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Pilih File Excel</label>
@@ -493,7 +573,79 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+    <!-- MODAL: TAMBAH USER -->
+    <div class="modal fade" id="modal-user" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h6 class="modal-title fw-bold">Tambah / Edit User</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="user-edit-id" value="">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Username</label>
+                        <input type="text" id="user-username" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Password (kosongkan jika tidak diubah)</label>
+                        <input type="password" id="user-password" class="form-control form-control-sm">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Role</label>
+                        <select id="user-role" class="form-select form-select-sm">
+                            <option value="viewer">Viewer (hanya lihat)</option>
+                            <option value="admin">Admin (edit data)</option>
+                            <option value="super_admin">Super Admin (edit + log)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="saveUser()">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: TAMBAH TEMPLATE WA -->
+    <div class="modal fade" id="modal-template" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h6 class="modal-title fw-bold">Tambah / Edit Template WA</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="template-edit-id" value="">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Nama Template</label>
+                        <input type="text" id="template-name" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Tipe</label>
+                        <select id="template-type" class="form-select form-select-sm">
+                            <option value="pic">PIC Cabang</option>
+                            <option value="provider">Provider/Helpdesk</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Isi Template</label>
+                        <textarea id="template-content" class="form-control form-control-sm" rows="5" required></textarea>
+                        <small class="text-muted">Placeholder: {site}, {ip}, {pic_name}, {nojar_versa}, {nojar_starlink}, {provider_info}</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-success btn-sm" onclick="saveTemplate()">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        window.userRole = '{{ role }}';
+        window.userName = '{{ username }}';
         let allRouters = [];
         let leafletMap = null;
         let mapMarkers = [];
@@ -504,24 +656,30 @@
 
         // --- RELIABLE TAB SWITCHER ---
         function switchTab(tabId) {
-            // Hide all tab areas
-            document.querySelectorAll('.tab-content-area').forEach(el => el.classList.add('d-none'));
-            // Remove active from all nav buttons
-            document.querySelectorAll('.nav-link-tab').forEach(el => el.classList.remove('active'));
+            try {
+                // Hide all tab areas
+                document.querySelectorAll('.tab-content-area').forEach(el => el.classList.add('d-none'));
+                // Remove active from all nav buttons
+                document.querySelectorAll('.nav-link-tab').forEach(el => el.classList.remove('active'));
 
-            // Show selected tab
-            const target = document.getElementById(tabId);
-            if (target) target.classList.remove('d-none');
+                // Show selected tab
+                const target = document.getElementById(tabId);
+                if (target) target.classList.remove('d-none');
 
-            // Set active class on navbar button
-            const btn = document.getElementById('btn-' + tabId);
-            if (btn) btn.classList.add('active');
+                // Set active class on navbar button
+                const btn = document.getElementById('btn-' + tabId);
+                if (btn) btn.classList.add('active');
 
-            // Trigger tab-specific initializations
-            if (tabId === 'tab-map') {
-                setTimeout(initOrInvalidateMap, 100);
-            } else if (tabId === 'tab-stats') {
-                setTimeout(loadCharts, 100);
+                // Trigger tab-specific initializations
+                if (tabId === 'tab-map') {
+                    setTimeout(() => { if (typeof initOrInvalidateMap === 'function') initOrInvalidateMap(); }, 100);
+                } else if (tabId === 'tab-stats') {
+                    setTimeout(() => { if (typeof loadCharts === 'function') loadCharts(); }, 100);
+                } else if (tabId === 'tab-devices') {
+                    if (typeof loadDevices === 'function') loadDevices();
+                }
+            } catch (e) {
+                console.error('Error switching tab:', e);
             }
         }
 
@@ -708,6 +866,17 @@
         }
 
         // --- CHARTS & STATS ---
+        function filterMapMarkers() {
+            const q = (document.getElementById('map-search')?.value || '').toLowerCase();
+            const filtered = !q ? allRouters : allRouters.filter(r =>
+                (r.site || '').toLowerCase().includes(q) ||
+                (r.ip_lintas || '').toLowerCase().includes(q) ||
+                (r.ip_icon || '').toLowerCase().includes(q) ||
+                (r.pic_name || '').toLowerCase().includes(q)
+            );
+            updateMapMarkers(filtered);
+        }
+
         function loadCharts() {
             fetch('/api/stats/downtime-by-site')
                 .then(r => r.json())
@@ -987,6 +1156,138 @@
             });
         }
 
+        // --- USER MANAGEMENT ---
+        function loadUsers() {
+            const tbody = document.getElementById('users-table-body');
+            if (!tbody) return;
+            fetch('/api/users')
+                .then(r => r.json())
+                .then(data => {
+                    tbody.innerHTML = '';
+                    (data || []).forEach(u => {
+                        const tr = document.createElement('tr');
+                        const canDelete = window.userRole === 'super_admin' && u.username !== 'superadmin';
+                        tr.innerHTML = `<td>${u.username}</td><td><span class="badge bg-secondary">${u.role}</span></td><td><button class="btn btn-sm btn-outline-primary" onclick="editUser(${u.id}, '${u.username}', '${u.role}')"><i class="bi bi-pencil"></i></button>${canDelete ? ` <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${u.id})"><i class="bi bi-trash"></i></button>` : ''}</td>`;
+                        tbody.appendChild(tr);
+                    });
+                }).catch(e => console.error(e));
+        }
+        function showAddUserModal() {
+            document.getElementById('user-edit-id').value = '';
+            document.getElementById('user-username').value = '';
+            document.getElementById('user-password').value = '';
+            document.getElementById('user-role').value = 'viewer';
+            new bootstrap.Modal(document.getElementById('modal-user')).show();
+        }
+        function editUser(id, username, role) {
+            document.getElementById('user-edit-id').value = id;
+            document.getElementById('user-username').value = username;
+            document.getElementById('user-password').value = '';
+            document.getElementById('user-role').value = role;
+            new bootstrap.Modal(document.getElementById('modal-user')).show();
+        }
+        function saveUser() {
+            const id = document.getElementById('user-edit-id').value;
+            const username = document.getElementById('user-username').value;
+            const password = document.getElementById('user-password').value;
+            const role = document.getElementById('user-role').value;
+            const payload = { username, role };
+            if (password) payload.password = password;
+            const url = id ? `/api/users/${id}` : '/api/users';
+            const method = id ? 'PUT' : 'POST';
+            fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) alert('Gagal: ' + data.error);
+                    else { alert(data.message || 'Tersimpan'); bootstrap.Modal.getInstance(document.getElementById('modal-user')).hide(); loadUsers(); }
+                })
+                .catch(err => alert('Gagal: ' + err));
+        }
+        function deleteUser(id) {
+            if (!confirm('Hapus user ini?')) return;
+            fetch(`/api/users/${id}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => { if (data.error) alert('Gagal: ' + data.error); else { alert(data.message || 'Terhapus'); loadUsers(); } })
+                .catch(err => alert('Gagal: ' + err));
+        }
+        function loadAuditLog() {
+            const cont = document.getElementById('audit-log-container');
+            if (cont) cont.classList.remove('d-none');
+            fetch('/api/audit-log')
+                .then(r => r.json())
+                .then(data => {
+                    const tbody = document.getElementById('audit-log-body');
+                    if (!tbody) return;
+                    tbody.innerHTML = '';
+                    (data || []).slice(0, 50).forEach(a => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td>${a.created_at || ''}</td><td>${a.username || ''}</td><td>${a.action || ''}</td><td>${a.table_name || ''}</td>`;
+                        tbody.appendChild(tr);
+                    });
+                }).catch(e => console.error(e));
+        }
+
+        // --- WA TEMPLATES ---
+        function loadTemplates() {
+            const tbody = document.getElementById('wa-templates-table-body');
+            if (!tbody) return;
+            fetch('/api/whatsapp/templates')
+                .then(r => r.json())
+                .then(data => {
+                    tbody.innerHTML = '';
+                    (data || []).forEach(t => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td>${t.name}</td><td><span class="badge bg-secondary">${t.type}</span></td><td><button class="btn btn-sm btn-outline-primary" onclick="editTemplate(${t.id})"><i class="bi bi-pencil"></i></button> <button class="btn btn-sm btn-outline-danger" onclick="deleteTemplate(${t.id})"><i class="bi bi-trash"></i></button></td>`;
+                        tbody.appendChild(tr);
+                    });
+                }).catch(e => console.error(e));
+        }
+        function showAddTemplateModal() {
+            document.getElementById('template-edit-id').value = '';
+            document.getElementById('template-name').value = '';
+            document.getElementById('template-type').value = 'pic';
+            document.getElementById('template-content').value = '';
+            new bootstrap.Modal(document.getElementById('modal-template')).show();
+        }
+        function editTemplate(id) {
+            fetch('/api/whatsapp/templates').then(r=>r.json()).then(data=>{
+                const t = (data||[]).find(x=>x.id===id);
+                if(!t) return;
+                document.getElementById('template-edit-id').value = t.id;
+                document.getElementById('template-name').value = t.name;
+                document.getElementById('template-type').value = t.type;
+                document.getElementById('template-content').value = t.content;
+                new bootstrap.Modal(document.getElementById('modal-template')).show();
+            });
+        }
+        function saveTemplate() {
+            const id = document.getElementById('template-edit-id').value;
+            const name = document.getElementById('template-name').value;
+            const type = document.getElementById('template-type').value;
+            const content = document.getElementById('template-content').value;
+            const payload = { name, type, content };
+            const url = id ? `/api/whatsapp/templates/${id}` : '/api/whatsapp/templates';
+            const method = id ? 'PUT' : 'POST';
+            fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) alert('Gagal: ' + data.error);
+                    else { alert(data.message || 'Tersimpan'); bootstrap.Modal.getInstance(document.getElementById('modal-template')).hide(); loadTemplates(); }
+                })
+                .catch(err => alert('Gagal: ' + err));
+        }
+        function deleteTemplate(id) {
+            if (!confirm('Hapus template ini?')) return;
+            fetch(`/api/whatsapp/templates/${id}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => { if (data.error) alert('Gagal: ' + data.error); else { alert(data.message || 'Terhapus'); loadTemplates(); } })
+                .catch(err => alert('Gagal: ' + err));
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => { loadUsers(); loadTemplates(); }, 500);
+        });
+
         // --- DATA RETENTION ---
         function executePurge() {
             const table = document.getElementById('purge-table').value;
@@ -1007,6 +1308,164 @@
                 }
             });
         }
+    <!-- ==================== MODAL: TAMBAH / EDIT PERANGKAT ==================== -->
+    <div class="modal fade" id="modal-device" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h6 class="modal-title fw-bold" id="modal-device-title">Tambah / Edit Data Perangkat</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-device" onsubmit="saveDevice(event)">
+                        <input type="hidden" id="device-id" value="">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Site</label>
+                                <input type="text" id="device-site" class="form-control form-control-sm" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Model Router</label>
+                                <input type="text" id="device-model" class="form-control form-control-sm">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label small fw-bold">Regist Router Versa</label>
+                                <input type="text" id="device-regist-versa" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label small fw-bold">Regist PSU</label>
+                                <input type="text" id="device-regist-psu" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label small fw-bold">Kuota Langganan</label>
+                                <input type="text" id="device-kuota" class="form-control form-control-sm" placeholder="Contoh: 100 Mbps">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Akses Link 1 (Lintasarta)</label>
+                                <select id="device-access-lintas" class="form-select form-select-sm">
+                                    <option value="Fiber Optic">Fiber Optic</option>
+                                    <option value="Starlink">Starlink</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Akses Link 2 (ICON)</label>
+                                <select id="device-access-icon" class="form-select form-select-sm">
+                                    <option value="Fiber Optic">Fiber Optic</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Nojar Versa</label>
+                                <input type="text" id="device-nojar-versa" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Nojar Starlink</label>
+                                <input type="text" id="device-nojar-starlink" class="form-control form-control-sm">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('form-device').dispatchEvent(new Event('submit'))">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        // --- DATA PERANGKAT ---
+        async function loadDevices() {
+            try {
+                const res = await fetch('/api/devices');
+                const data = await res.json();
+                const tbody = document.getElementById('devices-table-body');
+                tbody.innerHTML = '';
+                (data || []).forEach(d => {
+                    const tr = document.createElement('tr');
+                    const canEdit = window.userRole === 'admin' || window.userRole === 'super_admin';
+                    const canDelete = window.userRole === 'super_admin';
+                    tr.innerHTML = `<td>${d.site}</td><td>${d.router_model || '-'}</td><td>${d.router_versa_regist || '-'}</td><td>${d.psu_regist || '-'}</td><td><span class="badge bg-secondary">${d.access_lintas || 'Fiber Optic'}</span></td><td><span class="badge bg-secondary">${d.access_icon || 'Fiber Optic'}</span></td><td>${d.kuota_langganan || '-'}</td><td>${d.nojar_cpe_versa || '-'}</td><td>${d.nojar_starlink || '-'}</td><td>${canEdit ? `<button class="btn btn-sm btn-outline-primary" onclick="editDevice(${d.id})"><i class="bi bi-pencil"></i></button>` : ''}${canDelete ? ` <button class="btn btn-sm btn-outline-danger" onclick="deleteDevice(${d.id})"><i class="bi bi-trash"></i></button>` : ''}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) { console.error('Error loading devices:', e); }
+        }
+
+        function showAddDeviceModal() {
+            document.getElementById('device-id').value = '';
+            document.getElementById('device-site').value = '';
+            document.getElementById('device-model').value = '';
+            document.getElementById('device-regist-versa').value = '';
+            document.getElementById('device-regist-psu').value = '';
+            document.getElementById('device-kuota').value = '';
+            document.getElementById('device-access-lintas').value = 'Fiber Optic';
+            document.getElementById('device-access-icon').value = 'Fiber Optic';
+            document.getElementById('device-nojar-versa').value = '';
+            document.getElementById('device-nojar-starlink').value = '';
+            new bootstrap.Modal(document.getElementById('modal-device')).show();
+        }
+        async function editDevice(id) {
+            try {
+                const res = await fetch(`/api/devices/${id}`);
+                const d = await res.json();
+                document.getElementById('device-id').value = d.id;
+                document.getElementById('device-site').value = d.site;
+                document.getElementById('device-model').value = d.router_model || '';
+                document.getElementById('device-regist-versa').value = d.router_versa_regist || '';
+                document.getElementById('device-regist-psu').value = d.psu_regist || '';
+                document.getElementById('device-kuota').value = d.kuota_langganan || '';
+                document.getElementById('device-access-lintas').value = d.access_lintas || 'Fiber Optic';
+                document.getElementById('device-access-icon').value = d.access_icon || 'Fiber Optic';
+                document.getElementById('device-nojar-versa').value = d.nojar_cpe_versa || '';
+                document.getElementById('device-nojar-starlink').value = d.nojar_starlink || '';
+                new bootstrap.Modal(document.getElementById('modal-device')).show();
+            } catch (e) { alert('Gagal memuat data perangkat: ' + e); }
+        }
+
+        async function saveDevice(e) {
+            e.preventDefault();
+            const id = document.getElementById('device-id').value;
+            const payload = {
+                site: document.getElementById('device-site').value,
+                router_model: document.getElementById('device-model').value,
+                router_versa_regist: document.getElementById('device-regist-versa').value,
+                psu_regist: document.getElementById('device-regist-psu').value,
+                kuota_langganan: document.getElementById('device-kuota').value,
+                access_lintas: document.getElementById('device-access-lintas').value,
+                access_icon: document.getElementById('device-access-icon').value,
+                nojar_cpe_versa: document.getElementById('device-nojar-versa').value,
+                nojar_starlink: document.getElementById('device-nojar-starlink').value
+            };
+            const url = id ? `/api/devices/${id}` : '/api/devices';
+            const method = id ? 'PUT' : 'POST';
+            try {
+                const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (data.error) alert('Gagal: ' + data.error);
+                else { alert(data.message || 'Tersimpan'); bootstrap.Modal.getInstance(document.getElementById('modal-device')).hide(); loadDevices(); }
+            } catch (err) { alert('Gagal: ' + err); }
+        }
+
+        async function deleteDevice(id) {
+            if (!confirm('Hapus data perangkat ini?')) return;
+            try {
+                const res = await fetch(`/api/devices/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.error) alert('Gagal: ' + data.error);
+                else { alert(data.message || 'Terhapus'); loadDevices(); }
+            } catch (err) { alert('Gagal: ' + err); }
+        }
+
+        const origSwitchTab = switchTab;
+        window.switchTab = function(tabId) {
+            origSwitchTab(tabId);
+            if (tabId === 'tab-devices') loadDevices();
+        };
+
     </script>
 </body>
 </html>

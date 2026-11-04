@@ -73,17 +73,41 @@ class BranchImporter:
             logger.error(f"Excel import failed: {e}")
             return {"success": False, "error": str(e)}
 
+    def _normalize_header(self, text):
+        return ' '.join(str(text).strip().lower().replace('_', ' ').replace('-', ' ').replace('.', ' ').split())
+
     def _normalize_columns(self, df):
-        """Normalize column names based on mapping"""
+        """Normalize column names based on mapping (fuzzy header matching)"""
         normalized = {}
+        # Build normalized alias map
+        alias_map = {}
         for standard, variants in self.COLUMN_MAPPING.items():
-            variant_set = {str(variant).strip().lower() for variant in variants}
-            for col in df.columns:
-                if str(col).strip().lower() in variant_set:
-                    normalized[col] = standard
-                    break
-        if normalized:
-            df = df.rename(columns=normalized)
+            for v in variants:
+                alias_map[self._normalize_header(v)] = standard
+            alias_map[self._normalize_header(standard)] = standard
+
+        for col in df.columns:
+            key = self._normalize_header(col)
+            if key in alias_map:
+                normalized[col] = alias_map[key]
+            else:
+                # try contains match
+                for alias, standard in alias_map.items():
+                    if alias and (alias in key or key in alias):
+                        normalized[col] = standard
+                        break
+
+        # Avoid duplicate standard targets: keep first
+        seen = set()
+        final = {}
+        for col, std in normalized.items():
+            if std in seen:
+                continue
+            seen.add(std)
+            final[col] = std
+
+        if final:
+            df = df.rename(columns=final)
         return df
 
     def _cell(self, row, key):
